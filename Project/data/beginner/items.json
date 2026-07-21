@@ -1,0 +1,73 @@
+{
+  "fountain_coin": {
+    "name": "噴水池硬幣",
+    "desc": "舊舊的銅幣，上頭幾乎看不清楚圖案。",
+    "simple_use": { "reply": "你把硬幣收進口袋。", "gold_delta": 1, "consume": true }
+  },
+  "room_key": {
+    "name": "客房鑰匙",
+    "desc": "旅館客房的鑰匙，能開啟樓上的房門。",
+    "simple_use": { "reply": "你把鑰匙握在手心，感到安心。" }
+  },
+  "healing_herb": {
+    "name": "治療藥草",
+    "desc": "嚼食能恢復少量體力。",
+    "simple_use": { "reply": "你嚼了藥草，回復了一些體力。", "hp_delta": 5, "consume": true }
+  },
+  "bread": {
+    "name": "麵包",
+    "desc": "剛出爐的麵包，聞起來很香。",
+    "simple_use": { "reply": "你吃掉了麵包。", "hp_delta": 3, "consume": true }
+  },
+  "holy_water": {
+    "name": "聖水",
+    "desc": "潔淨的水，令你心神安定。",
+    "simple_use": { "reply": "你喝了一口聖水。", "mp_delta": 5, "consume": true }
+  },
+  "iron_ore": {
+    "name": "鐵礦",
+    "desc": "可以交給鐵匠加工的原料。"
+  },
+  "dagger": {
+    "name": "匕首",
+    "desc": "簡單的短刃武器，方便攜帶。"
+  },
+  "silver_cross": {
+    "name": "銀十字架",
+    "desc": "象徵信仰的飾物，光澤柔和。"
+  },
+  "apple": {
+    "name": "蘋果",
+    "desc": "紅通通的蘋果，看起來很多汁。",
+    "simple_use": { "reply": "你吃掉了蘋果。", "hp_delta": 2, "consume": true }
+  },
+  "wheat": {
+    "name": "小麥",
+    "desc": "收穫的穀物，可以交給麵包師。"
+  },
+  "fishing_rod": {
+    "name": "釣竿",
+    "desc": "或許能在碼頭派上用場。"
+  },
+	"spear_basic": {
+      "name": "長槍",
+      "kind": "weapon",
+      "slot": "weapon",
+      "bonuses": {"atk": 1000, "speed": 0},
+      "tags": ["pierce"]
+    },
+    "leather_armor": {
+      "name": "皮甲",
+      "kind": "armor",
+      "slot": "body",
+      "bonuses": {"def_": 1, "speed": 0},
+      "tags": ["light_armor"]
+    },
+    "tower_shield": {
+      "name": "塔盾",
+      "kind": "armor",
+      "slot": "offhand",
+      "bonuses": {"def_": 2, "speed": -1},
+      "tags": ["shield","heavy_armor"]
+    }
+}

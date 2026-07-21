@@ -1,0 +1,40 @@
+{
+  "status_effects": {
+    "focus_up": {
+      "duration": 3,
+      "mods": { "crit": 10 }
+    },
+    "Petrified": {
+      "duration": 99,
+      "mods": { "cant_act": true }
+    },
+    "Staggered": {
+      "duration": 3,
+      "mods": { "speed_pct": -50 }
+    },
+    "Poisoned": {
+      "duration": 3,
+      "mods": {}
+    },
+    "Bleeding": {
+      "duration": 99,
+      "mods": {},
+      "meta": {
+        "stacking": true,
+        "max_stacks": 6
+      }
+    },
+    "Corroded": {
+      "duration": 99,
+      "mods": { "def_pct": 0 }
+    },
+    "Infected": {
+      "duration": 5,
+      "mods": { "CON_flat": -5 }
+    },
+    "Unbalanced": {
+      "duration": 2,
+      "mods": { "defend_fail": true, "hit_mult_pct": -50 }
+    }
+  }
+}

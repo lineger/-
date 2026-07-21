@@ -1,0 +1,20 @@
+    def resolve_npc_in_room(self, state, text) -> str:
+        q = text.strip().lower()
+        room = self.world["rooms"][state.room_id]
+        for nid in room.get("npcs", []):
+            npc = self.world["npcs"][nid]
+            aliases = [a.lower() for a in npc.get("aliases", [])]
+            if q == nid.lower() or q in aliases:
+                return nid
+        return ""
+
+
+    def _enemy_stats(self, enemy_id: str) -> Dict[str, int]:
+        src = self.world.get("npcs", {}).get(enemy_id) or self.world.get("monsters", {}).get(enemy_id)
+        c = (src or {}).get("combat", {})
+        return {
+            "hp":    int(c.get("hp", 10)),
+            "atk":   int(c.get("atk", 3)),
+            "def":   int(c.get("def", 1)),
+            "speed": int(c.get("speed", 3)),
+        }
