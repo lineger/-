@@ -61,13 +61,9 @@ class NPCProfile:
     speed: int = 3
     crit: int = 0
 
-    # 屬性六圍
-    STR: int = 0
-    INT: int = 0
-    CON: int = 0
-    DEX: int = 0
-    CHA: int = 0
-    LCK: int = 0
+    # 屬性六圍改成巢狀物件，跟玩家的 state.attr  同一種型別
+    attr: Attributes = field(default_factory=Attributes)
+
 
     # 永久裝備（如你允許 NPC 也能換裝，就放在這裡）
     equipment: Dict[str, Optional[str]] = field(default_factory=dict)
