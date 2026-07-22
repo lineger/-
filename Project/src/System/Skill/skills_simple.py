@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import List, Dict, Any
-from System.Skill.skills_core import Intent, SkillSpec
+from System.Skill.skills_core import Intent, SkillSpec, CombatLike
 
 class GenericSkill(SkillSpec):
     """
@@ -47,7 +47,7 @@ class GenericSkill(SkillSpec):
             amt += int(round(k * val))
         return amt
 
-    def make_intents(self, combat: "CombatEngine", state, caster_id: str, targets: List[str]) -> List[Intent]:
+    def make_intents(self, combat: CombatLike, state, caster_id: str, targets: List[str]) -> List[Intent]:
         t = self._resolve_target(caster_id, targets, getattr(state.combat, "enemy_id", None))
         out: List[Intent] = []
 
