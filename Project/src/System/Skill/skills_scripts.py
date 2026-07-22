@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Callable, Optional
 from System.Skill.skills_core import Intent, SkillSpec
 
 # === 腳本登錄 ===
