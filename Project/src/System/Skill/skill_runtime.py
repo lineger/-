@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import List, Dict, Any
-from System.Skill.skills_core import Intent, SkillSpec
+from System.Skill.skills_core import Intent, SkillSpec, CombatLike
 from System.Skill.skills_simple import GenericSkill
 from System.Skill.skills_scripts import ScriptedSkill
 from Data.derive import recompute_derived
@@ -11,7 +11,7 @@ from Data.derive import recompute_derived
 # ===== 執行器（唯一施放入口）=====
 class SkillRuntime:
     """檢查→扣 MP（含動態折扣）→產 Intents→交給 Combat 決算→設冷卻→推回合"""
-    def __init__(self, combat_engine, cooldown_box, status_box):
+    def __init__(self, combat_engine：CombatLike, cooldown_box, status_box):
         self.combat = combat_engine
         self._cooldown_box = cooldown_box
         self._status_box   = status_box
