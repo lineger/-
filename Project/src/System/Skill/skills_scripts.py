@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import List, Dict, Any, Callable, Optional
-from System.Skill.skills_core import Intent, SkillSpec, Combatlike
+from System.Skill.skills_core import Intent, SkillSpec, CombaLike
 
 # === 腳本登錄 ===
 _SCRIPT_REG: Dict[str, Callable] = {}
