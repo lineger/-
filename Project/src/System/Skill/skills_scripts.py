@@ -20,7 +20,7 @@ class ScriptedSkill(SkillSpec):
     def __init__(self, *, id, name, mp_cost=0, cooldown=0, tags=None, row=None):
         self.id=id; self.name=name; self.cooldown=int(cooldown); self.mp_cost=int(mp_cost)
         self.tags=list(tags or []); self.row=row or {}
-    def make_intents(self, combat: "CombatEngine", state, caster_id: str, targets: List[str]) -> List[Intent]:
+    def make_intents(self, combat: CombatLike, state, caster_id: str, targets: List[str]) -> List[Intent]:
         fn = get_script(self.row.get("script"))
         if not fn:
             combat.say(f"技能腳本 {self.row.get('script')} 不存在。"); return []
