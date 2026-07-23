@@ -11,7 +11,7 @@ from Data.derive import recompute_derived
 # ===== 執行器（唯一施放入口）=====
 class SkillRuntime:
     """檢查→扣 MP（含動態折扣）→產 Intents→交給 Combat 決算→設冷卻→推回合"""
-    def __init__(self, combat_engine：CombatLike, cooldown_box, status_box):
+    def __init__(self, combat_engine:CombatLike, cooldown_box, status_box):
         self.combat = combat_engine
         self._cooldown_box = cooldown_box
         self._status_box   = status_box
