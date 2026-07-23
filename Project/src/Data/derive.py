@@ -129,5 +129,4 @@ def recompute_derived(world, state: GameState):
     for nid in members:
         prof = profiles.get(nid)
         if prof:
-            _recompute_npc(world, prof)
-        _recompute_npc(world, prof)
+            _recompute_npc(world, prof)
