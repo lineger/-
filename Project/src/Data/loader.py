@@ -130,7 +130,7 @@ def load_world(base="../data/beginner"):
     tags_path = os.path.join(base, "tags")
     if not os.path.exists(tags_path):
         tags_path = os.path.join(base, "tags.json")    
-    tags = _read_json(tags_path)
+    tags = _load_collection(tags_path, key_name="tags")
 
     # status_effects
     status_effects_path = os.path.join(base, "status_effects.json")
