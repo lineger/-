@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Proto col, Tuple
 
 # ===== 核心型別 =====
 @dataclass
