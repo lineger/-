@@ -88,9 +88,9 @@ class TeamSystem:
         prof.crit    = int(c.get("crit", src.get("crit", 0)))
 
         # 屬性六圍（若 world 有 attr 區段就吃）
-        prof.attr = src.get("attr", {}) or {}
+        attr = src.get("attr", {}) or {}
         for k in ("STR","INT","CON","DEX","CHA","LCK"):
-            setattr(prof.attr, k, int(attr.get(k, getattr(prof, k))))
+            setattr(prof.attr, k, int(attr.get(k, getattr(prof.attr, k))))
 
         # 裝備（以 world 初值為基礎）
         prof.equipment = dict(src.get("equipment") or {})
