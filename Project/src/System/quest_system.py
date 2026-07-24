@@ -1,6 +1,7 @@
 # Project/src/System/quest_system.py
 
 from typing import List, Tuple, Optional, Dict, Any, Set
+from System.action_request import ActionRequest
 from System.systems_hub import BaseSystem
 from Data.state import GameState # 假設 GameState 已經有 quest 屬性
 import traceback
@@ -80,21 +81,26 @@ class QuestSystem(BaseSystem):
 
     # --- Hub 介面實作：供外部系統呼叫 ---
     
-    def can_fire(self, verb, state, **kw) -> bool:
-        if verb == "quest_log":
+    def _can_accept(self, state: GameState, quest_id: str | None) -> bool:
+        return bool(
+            quest_id
+            and quest_id in self.quests
+            and quest_id not in state.quest.active
+            and quest_id not in state.quest.completed
+        )
+
+    def can_fire(self, request: ActionRequest, state) -> bool:
+        if request.verb == "quest_log":
             return True
-        if verb == "quest_accept":
-            # 任務不存在、已活躍或已完成則不能接受
-            qid = kw.get("item_id")
-            return bool(qid in self.quests and qid not in state.quest.active and qid not in state.quest.completed)
+        if request.verb == "quest_accept":
+            return self._can_accept(state, request.quest_id)
         return False
-        
-    def fire(self, verb, state, **kw):
-        if verb == "quest_log":
+
+    def fire(self, request: ActionRequest, state):
+        if request.verb == "quest_log":
             return self._fire_log(state)
-        if verb == "quest_accept":
-            qid = kw.get("item_id")
-            return self._fire_accept(state, qid) # <-- qid 是從 item_id 來的
+        if request.verb == "quest_accept":
+            return self._fire_accept(state, request.quest_id)
         return {"ok": False}
         
     def _fire_log(self, state: GameState):
@@ -147,7 +153,7 @@ class QuestSystem(BaseSystem):
         return {"ok": True}
 
     def _fire_accept(self, state: GameState, quest_id: str):
-        if not self.can_fire("quest_accept", state, item_id=quest_id):
+        if not self._can_accept(state, quest_id):
             return {"ok": False, "text": "無法接受此任務 (已完成、已活躍或任務不存在)。"}
             
         qdef = self.quests.get(quest_id)
@@ -168,8 +174,11 @@ class QuestSystem(BaseSystem):
         return {"ok": True, "text": f"你接受了任務：{qdef['name']}。請記得查看任務日誌 (quest log)！"}
 
     # --- 外部鉤子：用於 Engine 在每次玩家行動後呼叫 ---
-    def quest_check(self, state: GameState, verb: str, target_id: Optional[str] = None, item_id: Optional[str] = None):
-        """暴露給 Engine 的接口：在玩家每次行動後調用。"""
+    def quest_check(self, state: GameState, request: ActionRequest):
+        """在每次動作後，依同一個 ActionRequest 更新任務進度。"""
+        verb = request.verb
+        target_id = request.target_id
+        item_id = request.topic_id if verb == "talk_say" else request.item_id
         qs = state.quest
         updated_quests: Set[str] = set()
 

@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional, List
 from Data.state import NPCProfile
+from System.action_request import ActionRequest
 
 class TeamSystem:
     """
@@ -102,7 +103,10 @@ class TeamSystem:
         state.npc_profiles[target_id] = prof
 
     # ---------- hub interface ----------
-    def can_fire(self, verb, state, *, target_id: Optional[str] = None, **_):
+    def can_fire(self, request: ActionRequest, state) -> bool:
+        verb = request.verb
+        target_id = request.target_id
+
         if verb == "party":
             return True
 
@@ -119,7 +123,10 @@ class TeamSystem:
 
         return False
 
-    def fire(self, verb, state, *, target_id: Optional[str] = None, **_):
+    def fire(self, request: ActionRequest, state):
+        verb = request.verb
+        target_id = request.target_id
+
         if verb == "party":
             names = [self._npc_name(nid) for nid in self._members(state)]
             return {"ok": True, "text": "隊伍成員：" + ("、".join(names) if names else "（空）")}

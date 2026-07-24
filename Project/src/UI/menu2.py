@@ -193,7 +193,7 @@ class ActionMenu:
                 self._add_option(
                     f"-> {enemy_name} (敵人)",
                     lambda target=enemy_id: self._run_and_refresh(
-                        self.engine.combat.fire, "combat_act", self.state,
+                        self.engine.fire, "combat_act", self.state,
                         actor_id=actor_id, action=action, item_id=item_id, target_id=target
                     )
                 )
@@ -211,7 +211,7 @@ class ActionMenu:
                     self._add_option(
                         f"-> {ally_name} (盟友)",
                         lambda target=ally_id: self._run_and_refresh(
-                            self.engine.combat.fire, "combat_act", self.state,
+                            self.engine.fire, "combat_act", self.state,
                             actor_id=actor_id, action=action, item_id=item_id, target_id=target
                         )
                     )
@@ -224,7 +224,7 @@ class ActionMenu:
                 self._add_option(
                     f"-> {player_name} (自己)",
                     lambda: self._run_and_refresh(
-                        self.engine.combat.fire, "combat_act", self.state,
+                        self.engine.fire, "combat_act", self.state,
                         actor_id=actor_id, action=action, item_id=item_id, target_id="$player"
                     )
                 )
@@ -252,7 +252,7 @@ class ActionMenu:
         room = self.world["rooms"][self.state.room_id]
 
         if v == "quest_log":
-            self._add_option("查看任務日誌", lambda: self.engine.hub.fire("quest_log", self.state))
+            self._add_option("查看任務日誌", lambda: self.engine.fire("quest_log", self.state))
             return
 
         # ---- 非情境（立即執行）----
@@ -321,7 +321,7 @@ class ActionMenu:
                             self._add_option(
                                 f"＞ {label}",
                                 lambda t=topic_id, nid2=nid: self._run_and_refresh(
-                                    self.engine.fire, "talk_say", self.state, item_id=t, target_id=nid2
+                                    self.engine.fire, "talk_say", self.state, topic_id=t, target_id=nid2
                                 )
                             )
 
@@ -430,10 +430,10 @@ class ActionMenu:
 
         # 可卸下的槽位
             for slot, cur in (getattr(getattr(self.state, "inventory", None), "equipment", {}) or {}).items():
-                if cur and self.engine.can_fire("unequip", self.state, target_id=slot):
+                if cur and self.engine.can_fire("unequip", self.state, slot=slot):
                     name = self.world["items"].get(cur, {}).get("name", cur)
                     self._add_option(f"卸下 {slot}: {name}",
-                        lambda _slot=slot: self.engine.fire("unequip", self.state, target_id=_slot))
+                        lambda _slot=slot: self.engine.fire("unequip", self.state, slot=_slot))
             return
 
         # ---突擊---
@@ -510,12 +510,12 @@ class ActionMenu:
                 
             # 情況 3：選擇 "防禦 (defend)" (無目標，立即執行)
             if v == "defend":
-                self._add_option("架勢防禦",lambda a=actor_id: self._run_and_refresh(self.engine.combat.fire, "combat_act", self.state,actor_id=a, action="defend"))
+                self._add_option("架勢防禦",lambda a=actor_id: self._run_and_refresh(self.engine.fire, "combat_act", self.state,actor_id=a, action="defend"))
                 return
 
             # 情況 4：選擇 "逃跑 (flee)" (無目標，立即執行)
             if v == "flee":
-                self._add_option("嘗試逃跑",lambda a=actor_id: self._run_and_refresh(self.engine.combat.fire, "combat_act", self.state,actor_id=a, action="flee"))
+                self._add_option("嘗試逃跑",lambda a=actor_id: self._run_and_refresh(self.engine.fire, "combat_act", self.state,actor_id=a, action="flee"))
                 return
             
             # 情況 5: 選擇 "Status" (無目標，立即執行)
@@ -568,6 +568,6 @@ class ActionMenu:
             add("🎁 送禮…", lambda nid=npc_id: self._on_talk_give_entry(nid))
 
     def _on_talk_say(self, npc_id: str, topic_id: str):
-        res = self.engine.fire("talk_say", self.state, target_id=npc_id, item_id=topic_id)
+        res = self.engine.fire("talk_say", self.state, target_id=npc_id, topic_id=topic_id)
         # Engine.fire 已會把 res["text"] 自動 say；這裡只要重刷一次話題即可
         self._on_talk_open(npc_id)

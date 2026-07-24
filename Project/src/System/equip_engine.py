@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional
 from Data.derive import recompute_derived
+from System.action_request import ActionRequest
 from Data.state import GameState
 
 
@@ -26,60 +27,65 @@ class EquipEngine:
             self.on_ui_refresh()
 
     # ---- 判斷 ----
-    def can_fire(self, verb: str, state: GameState, *, item_id: Optional[str] = None, slot: Optional[str] = None, **_) -> bool:
-        if verb == "equip":
-            if not item_id: 
+    def can_fire(self, request: ActionRequest, state: GameState) -> bool:
+        if request.verb == "equip":
+            item_id = request.item_id
+            if not item_id:
                 return False
-            it = self.world.get("items", {}).get(item_id)
-            if not it: 
+            item = self.world.get("items", {}).get(item_id)
+            if not item:
                 return False
-            if item_id not in state.inventory.items: 
+            if item_id not in state.inventory.items:
                 return False
-            sl = it.get("slot")
-            if not sl or sl not in state.inventory.equipment: 
+            slot = item.get("slot")
+            if not slot or slot not in state.inventory.equipment:
                 return False
-            # 規則：戰鬥中不可換裝
-            if state.combat.active: 
-                return False
-            return True
+            return not state.combat.active
 
-        if verb == "unequip":
-            if not slot or slot not in state.inventory.equipment: 
-                return {"ok": False}
-            if not state.inventory.equipment.get(slot): 
-                return {"ok": False}
-            if state.combat.active: 
-                return {"ok": False}
-            return {"ok": True}
+        if request.verb == "unequip":
+            slot = request.slot
+            if not slot or slot not in state.inventory.equipment:
+                return False
+            if not state.inventory.equipment.get(slot):
+                return False
+            return not state.combat.active
 
-        return False  # 只管 equip/unequip
+        return False
 
     # ---- 執行 ----
-    def fire(self, verb: str, state: GameState, *, item_id: Optional[str] = None, slot: Optional[str] = None, **_):
-        if verb == "equip":
-            if not self.can_fire("equip", state, item_id=item_id): 
-                self.say("現在無法裝備。"); return {"ok": False}
-            it = self.world["items"][item_id]
-            sl = it["slot"]
-            prev = state.inventory.equipment.get(sl)
-            state.inventory.equipment[sl] = item_id
-            if prev and prev not in state.inventory.items:  # 舊裝備回背包
-                state.inventory.items.append(prev)
+    def fire(self, request: ActionRequest, state: GameState):
+        if request.verb == "equip":
+            if not self.can_fire(request, state):
+                self.say("現在無法裝備。")
+                return {"ok": False}
+
+            item_id = request.item_id
+            item = self.world["items"][item_id]
+            slot = item["slot"]
+            previous = state.inventory.equipment.get(slot)
+            state.inventory.equipment[slot] = item_id
+            if previous and previous not in state.inventory.items:
+                state.inventory.items.append(previous)
             recompute_derived(self.world, state)
-            self.say(f"已裝備：{it.get('name', item_id)}")
+            self.say(f"已裝備：{item.get('name', item_id)}")
             self._notify_ui()
             return {"ok": True}
 
-        if verb == "unequip":
-            if not self.can_fire("unequip", state, slot=slot):
-                self.say("現在無法卸下。"); return {"ok": False}
-            cur = state.inventory.equipment.get(slot)
-            if cur:
+        if request.verb == "unequip":
+            if not self.can_fire(request, state):
+                self.say("現在無法卸下。")
+                return {"ok": False}
+
+            slot = request.slot
+            current = state.inventory.equipment.get(slot)
+            if current:
                 state.inventory.equipment[slot] = None
-                if cur not in state.inventory.items:
-                    state.inventory.items.append(cur)
+                if current not in state.inventory.items:
+                    state.inventory.items.append(current)
                 recompute_derived(self.world, state)
-                name = self.world["items"].get(cur, {}).get("name", cur)
+                name = self.world["items"].get(current, {}).get("name", current)
                 self.say(f"已卸下：{name}")
                 self._notify_ui()
             return {"ok": True}
+
+        return {"ok": False}

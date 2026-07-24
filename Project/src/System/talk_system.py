@@ -1,5 +1,6 @@
 from typing import List, Tuple, Optional, Dict, Any
 import traceback, time
+from System.action_request import ActionRequest
 from System.systems_hub import BaseSystem
 
 class TalkSystem(BaseSystem):
@@ -33,24 +34,27 @@ class TalkSystem(BaseSystem):
     
 
     # ========== Hub 標準介面 ==========
-    def can_fire(self, verb, state, *, item_id=None, target_id=None) -> bool:
-        if verb == "talk_open":
-            return target_id is not None
-        if verb == "talk_say":
-            return target_id is not None and item_id is not None  # item_id = topic_id
-        if verb == "talk_give":
-            # 新資料型態：背包改為 state.inventory.items
-            return (target_id is not None and item_id is not None) and (item_id in getattr(state.inventory, "items", []))
+    def can_fire(self, request: ActionRequest, state) -> bool:
+        if request.verb == "talk_open":
+            return request.target_id is not None
+        if request.verb == "talk_say":
+            return request.target_id is not None and request.topic_id is not None
+        if request.verb == "talk_give":
+            return (
+                request.target_id is not None
+                and request.item_id is not None
+                and request.item_id in getattr(state.inventory, "items", [])
+            )
         return False
 
-    def fire(self, verb, state, *, item_id=None, target_id=None):
-        if verb == "talk_open":
-            return self.open(state, target_id)
-        if verb == "talk_say":
-            return self.say_topic(state, target_id, item_id)
-        if verb == "talk_give":
-            return self.give(state, target_id, item_id)
-        return {"ok": False, "text": f"TalkSystem 不支援 verb={verb}"}
+    def fire(self, request: ActionRequest, state):
+        if request.verb == "talk_open":
+            return self.open(state, request.target_id)
+        if request.verb == "talk_say":
+            return self.say_topic(state, request.target_id, request.topic_id)
+        if request.verb == "talk_give":
+            return self.give(state, request.target_id, request.item_id)
+        return {"ok": False, "text": f"TalkSystem 不支援 verb={request.verb}"}
 
     # ========== 外部 API ==========
     def open(self, state, npc_id: str) -> dict:

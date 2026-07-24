@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import Optional
 
+from System.action_request import ActionRequest
+
 
 class SimpleSystem:
     """
@@ -27,7 +29,10 @@ class SimpleSystem:
         self.say = say
         self.hub = hub
 
-    def can_fire(self, verb: str, state, *, item_id: str | None = None, target_id: str | None = None) -> bool:
+    def can_fire(self, request: ActionRequest, state) -> bool:
+        verb = request.verb
+        item_id = request.item_id
+        target_id = request.target_id
         w = self.world or {}
 
         if verb == "give":
@@ -51,7 +56,10 @@ class SimpleSystem:
 
         return False
 
-    def fire(self, verb: str, state, *, item_id: str | None = None, target_id: str | None = None) -> bool:
+    def fire(self, request: ActionRequest, state) -> bool:
+        verb = request.verb
+        item_id = request.item_id
+        target_id = request.target_id
         say = self.say or (lambda *_: None)
         w = self.world or {}
 

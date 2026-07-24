@@ -1,5 +1,7 @@
 from typing import Dict, List
 
+from System.action_request import ActionRequest
+
 class EmotionSystem:
     """
     多維情感系統（向量）。
@@ -125,29 +127,44 @@ class EmotionSystem:
         return self.attitudes(state, who, max_labels=1)[0]
 
     # ---------------- Hub 介面 ----------------
-    def can_fire(self, verb, state, **kw) -> bool:
+    def can_fire(self, request: ActionRequest, state) -> bool:
+        verb = request.verb
         if verb not in self.verbs:
             return False
-        who = kw.get("npc_id") or kw.get("who")
+
+        who = request.target_id
         if verb in ("emotion_get", "emotion_attitudes", "emotion_attitude"):
             return who is not None
         if verb == "emotion_add":
-            return (who is not None) and (kw.get("emotion") in self.EMOTIONS) and isinstance(kw.get("delta"), int)
+            return (
+                who is not None
+                and request.emotion in self.EMOTIONS
+                and type(request.delta) is int
+            )
         if verb == "emotion_decay":
             return True
         return False
 
-    def fire(self, verb, state, **kw):
-        who = kw.get("npc_id") or kw.get("who")
+    def fire(self, request: ActionRequest, state):
+        verb = request.verb
+        who = request.target_id
+
         if verb == "emotion_add":
-            return self.add(state, who, kw.get("emotion"), kw.get("delta", 0), silent=kw.get("silent", False))
+            return self.add(
+                state,
+                who,
+                request.emotion,
+                request.delta or 0,
+                silent=bool(request.silent),
+            )
         if verb == "emotion_get":
-            return self.get(state, who, kw.get("emotion"))
+            return self.get(state, who, request.emotion)
         if verb == "emotion_decay":
-            self.decay(state, rate=int(kw.get("rate", 1)))
+            self.decay(state, rate=request.rate if request.rate is not None else 1)
             return True
         if verb == "emotion_attitudes":
-            return self.attitudes(state, who, max_labels=int(kw.get("max_labels", 3)))
+            limit = request.max_labels if request.max_labels is not None else 3
+            return self.attitudes(state, who, max_labels=limit)
         if verb == "emotion_attitude":
             return self.attitude_primary(state, who)
         return False

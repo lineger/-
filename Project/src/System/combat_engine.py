@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 from types import SimpleNamespace
 from Data.state import GameState, CombatantProfile
 from Data.derive import recompute_derived
+from System.action_request import ActionRequest
 from System.Skill.skill_runtime import SkillRuntime
 
 
@@ -605,36 +606,43 @@ class CombatEngine:
     
 
     # --- Hub verbs ---
-    def can_fire(self, verb: str, state: GameState, **kw) -> bool:
-        if verb == "ambush":
+    def can_fire(self, request: ActionRequest, state: GameState) -> bool:
+        if request.verb == "ambush":
             room = self.world["rooms"][state.room_id]
             return bool(self.enc.combat_npcs_in_room(self.world, state) or room.get("encounters"))
-        if verb == "engage":
-            tid = kw.get("target_id")
-            if not tid:
+        if request.verb == "engage":
+            if not request.target_id:
                 return False
-            npc = self.world["npcs"].get(tid, {})
+            npc = self.world["npcs"].get(request.target_id, {})
             return bool(npc.get("combat"))
-        if verb == "combat_act":
+        if request.verb == "combat_act":
             if not self.in_battle(state):
                 return False
-            actor = kw.get("actor_id")
-            return actor and actor == getattr(state.combat, "active_id", None) and (
-                actor == "$player" or getattr(state.combat, "ally_control", True)
+            actor = request.actor_id
+            return bool(
+                actor
+                and actor == getattr(state.combat, "active_id", None)
+                and (actor == "$player" or getattr(state.combat, "ally_control", True))
             )
         return False
 
-    def fire(self, verb: str, state: GameState, **kw):
-        if verb == "ambush":
-            self.enc.ambush(state); return {"ok": True}
-        if verb == "engage":
-            # 【修改】Engage 現在只負責將敵人加入戰鬥，start_combat 負責開始
-            self.enc.engage(state, kw.get("target_id"))
-            if state.combat.active and not state.combat.turn_queue:
-                 self.enc.start_combat(state)
+    def fire(self, request: ActionRequest, state: GameState):
+        if request.verb == "ambush":
+            self.enc.ambush(state)
             return {"ok": True}
-        if verb == "combat_act":
-            return self._do_combat_act(state, **kw)
+        if request.verb == "engage":
+            self.enc.engage(state, request.target_id)
+            if state.combat.active and not state.combat.turn_queue:
+                self.enc.start_combat(state)
+            return {"ok": True}
+        if request.verb == "combat_act":
+            return self._do_combat_act(
+                state,
+                actor_id=request.actor_id,
+                action=request.action,
+                item_id=request.item_id,
+                target_id=request.target_id,
+            )
         return None
 
     # --- 遭遇（保留公開 API，內部改呼叫 Encounters） ---

@@ -1,4 +1,5 @@
 from typing import Dict, List, Any, Callable
+from System.action_request import ActionRequest
 from System.systems_hub import SystemsHub
 from System.combat_engine import CombatEngine
 from System.equip_engine import EquipEngine
@@ -162,10 +163,10 @@ def eff_damage_hp(ctx, e):
 def eff_quest_accept(ctx, e):
     qid = e.get("quest_id")
     if not qid: return
-    # 呼叫 QuestSystem 的 fire/quest_accept
-    # 修正：直接使用 hub.fire()，它會自動迭代 systems 列表找到 QuestSystem
+    # 效果層已持有 hub，直接送入通過驗證的請求物件。
     if ctx["hub"]:
-        ctx["hub"].fire("quest_accept", ctx["state"], item_id=qid)
+        request = ActionRequest.build("quest_accept", quest_id=qid)
+        ctx["hub"].fire(request, ctx["state"])
 
 
 for k, v in {
@@ -231,65 +232,88 @@ class Engine:
             else:
                 ctx["say"](f"[WARN] 未支援效果: {e}")
 
-    def _collect_event_defs(self, verb: str, state, *, item_id: str | None = None, target_id: str | None = None) -> List[dict]:
+    def _collect_event_defs(self, request: ActionRequest, state) -> List[dict]:
         ev_ids: List[str] = []
-        if verb == "use" and item_id:
-            ev_ids = self.world["items"].get(item_id, {}).get("events", {}).get("use", [])
-        elif verb == "talk" and target_id:
-            ev_ids = self.world["npcs"].get(target_id, {}).get("events", {}).get("talk", [])
-        elif verb == "give" and item_id:
-            ev_ids = self.world["items"].get(item_id, {}).get("events", {}).get("give", [])
-        elif verb == "enter":
-            rid = state.room_id
-            ev_ids = self.world["rooms"].get(rid, {}).get("events", {}).get("enter", [])
-        return [self.events[eid] for eid in ev_ids if eid in self.events]
+        if request.verb == "use" and request.item_id:
+            ev_ids = self.world["items"].get(request.item_id, {}).get("events", {}).get("use", [])
+        elif request.verb == "talk" and request.target_id:
+            ev_ids = self.world["npcs"].get(request.target_id, {}).get("events", {}).get("talk", [])
+        elif request.verb == "give" and request.item_id:
+            ev_ids = self.world["items"].get(request.item_id, {}).get("events", {}).get("give", [])
+        elif request.verb == "enter":
+            room_id = state.room_id
+            ev_ids = self.world["rooms"].get(room_id, {}).get("events", {}).get("enter", [])
+        return [self.events[event_id] for event_id in ev_ids if event_id in self.events]
 
-    def _events_can_fire(self, verb, state, item_id=None, target_id=None) -> bool:
-        ctx = {"world": self.world, "state": state, "item_id": item_id, "target_id": target_id, "say": self.say}
-        for ev in self._collect_event_defs(verb, state, item_id=item_id , target_id=target_id ):
-            if _conds_ok(ev.get("when", []), ctx):
+    def _event_context(self, request: ActionRequest, state) -> dict:
+        return {
+            "world": self.world,
+            "state": state,
+            "item_id": request.item_id,
+            "target_id": request.target_id,
+            "say": self.say,
+        }
+
+    def _events_can_fire(self, request: ActionRequest, state) -> bool:
+        ctx = self._event_context(request, state)
+        for event in self._collect_event_defs(request, state):
+            if _conds_ok(event.get("when", []), ctx):
                 return True
         return False
 
-    def _try_fire_events(self, verb, state, item_id=None, target_id=None) -> bool:
-        ctx = {"world": self.world, "state": state, "item_id": item_id, "target_id": target_id, "say": self.say}
+    def _try_fire_events(self, request: ActionRequest, state) -> bool:
+        ctx = self._event_context(request, state)
         best = None
-        for ev in self._collect_event_defs(verb, state, item_id=item_id, target_id=target_id):
-            if _conds_ok(ev.get("when", []), ctx):
-                if best is None or int(ev.get("priority", 0)) > int(best.get("priority", 0)):
-                    best = ev
+        for event in self._collect_event_defs(request, state):
+            if _conds_ok(event.get("when", []), ctx):
+                if best is None or int(event.get("priority", 0)) > int(best.get("priority", 0)):
+                    best = event
         if best:
             self._apply(best.get("do", []), ctx)
             return True
         return False
 
-    def can_fire(self, verb, state, *, item_id=None, target_id=None) -> bool:
-        if self._events_can_fire(verb, state, item_id, target_id):
-            return True
-        return self.hub.can_fire(verb, state, item_id=item_id, target_id=target_id)
+    @staticmethod
+    def _result_info(result) -> tuple[bool, str | None]:
+        if isinstance(result, dict):
+            return bool(result.get("ok", True)), result.get("text")
+        if isinstance(result, bool):
+            return result, None
+        if result is None:
+            return False, None
+        return True, None
 
-    def fire(self, verb, state, *, item_id=None, target_id=None):
+    def can_fire(self, verb: str, state, **params) -> bool:
+        request = ActionRequest.build(verb, **params)
+        if self._events_can_fire(request, state):
+            return True
+        return self.hub.can_fire(request, state)
+
+    def fire(self, verb: str, state, **params):
+        request = ActionRequest.build(verb, **params)
+
         # 1. 執行核心系統動作
-        res = self.hub.fire(verb, state, item_id=item_id, target_id=target_id)
-        success = bool(res and (isinstance(res, dict) or res.get("ok", True)))
-        
+        result = self.hub.fire(request, state)
+        success, text = self._result_info(result)
+
         # 2. 執行事件系統（如果沒有被核心系統攔截）
-        if self._try_fire_events(verb, state, item_id, target_id):
-            # 事件發生時，不需要再輸出核心系統的文字
+        if self._try_fire_events(request, state):
             pass
         elif success:
-            if res.get("text"):
-                try: self.say(res["text"])
-                except Exception: pass
+            if text:
+                try:
+                    self.say(text)
+                except Exception:
+                    pass
         else:
             self.say("沒有發生什麼事。")
-            
-        # 3. **呼叫任務檢查鉤子**
+
+        # 3. 呼叫任務檢查鉤子
         if hasattr(self, "quest") and hasattr(self.quest, "quest_check"):
-            self.quest.quest_check(state, verb, target_id, item_id)
-            
+            self.quest.quest_check(state, request)
+
         # 4. 處理 go 動作後的 enter 事件
-        if verb == "go":
-             self._try_fire_events("enter", state)
-            
-        return res
+        if request.verb == "go":
+            self._try_fire_events(ActionRequest.build("enter"), state)
+
+        return result
