@@ -1,0 +1,27 @@
+{
+  "id": "hunter_ray",
+  "name": "獵人雷伊",
+  "aliases": ["獵人", "雷伊"],
+  "faction": "-",
+  "job": "-",
+  "level": 1,
+  "topics": {
+    "greet": {
+      "label": "打招呼",
+      "reply": "森林裡有狼的腳印，小心點。",
+      "once": false
+    },
+    "talk_1": {
+      "label": "聊聊 1",
+      "reply": "有釣竿？碼頭或許能有口飯吃。",
+      "once": true
+    }
+  },
+  "gifts": {
+    "fish": {
+      "reply": "不錯的收穫！這些乾肉分你一些。",
+      "reward_item": "bread",
+      "consume": true
+    }
+  }
+}

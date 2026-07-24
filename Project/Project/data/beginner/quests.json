@@ -1,0 +1,38 @@
+{
+  "quests": {
+    "Q_BREAD_FOR_BARD": {
+      "name": "醉鬼的聖水",
+      "desc": "醉醺醺的吟遊詩人想要聖水。聖水在教堂前庭。",
+      "tasks": [
+        { "type": "collect_item", "target": "holy_water", "count": 1 }
+      ],
+      "rewards": [
+        { "type": "exp", "amount": 10 },
+        { "type": "gold", "amount": 5 },
+        { "type": "item", "item_id": "silver_cross" }
+      ]
+    },
+    "Q_GO_TO_MARKET": {
+      "id": "Q_GO_TO_MARKET",
+      "name": "探索市場",
+      "desc": "米拉讓你去市場看看有沒有什麼新鮮事。",
+      "tasks": [
+        { "type": "go_to_room", "target": "market" }
+      ],
+      "rewards": [
+        { "type": "exp", "amount": 5 }
+      ]
+    },
+    "Q_TALK_TO_ANNA": {
+      "id": "Q_TALK_TO_ANNA",
+      "name": "安娜的煩惱",
+      "desc": "安娜讓你與她聊聊 '聊聊 1' 這個話題。",
+      "tasks": [
+        { "type": "talk_to_npc", "target": "baker_anna", "item_id": "talk_1" }
+      ],
+      "rewards": [
+        { "type": "item", "item_id": "bread" }
+      ]
+    }
+  }
+}

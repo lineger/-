@@ -1,0 +1,27 @@
+{
+  "id": "blacksmith_garret",
+  "name": "鐵匠加雷特",
+  "aliases": ["鐵匠", "加雷特"],
+  "faction": "-",
+  "job": "-",
+  "level": 1,
+  "topics": {
+    "greet": {
+      "label": "打招呼",
+      "reply": "你的裝備需要打磨？拿材料來我就幫你處理。",
+      "once": false
+    },
+    "talk_1": {
+      "label": "聊聊 1",
+      "reply": "好鋼要用在刀刃上。",
+      "once": true
+    }
+  },
+  "gifts": {
+    "iron_ore": {
+      "reply": "好材料！這把匕首先拿去防身。",
+      "reward_item": "dagger",
+      "consume": true
+    }
+  }
+}
