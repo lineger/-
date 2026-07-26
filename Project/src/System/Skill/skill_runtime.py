@@ -91,10 +91,33 @@ class SkillRuntime:
             is_crit = False
 
             
-            if "magic" in it.tags:
-                dmg = max(1, int(it.amount) + int(v_atk.matk) - int(v_def.mdef))
+            is_magic = "magic" in it.tags
+            attack_tags = self.combat._get_attack_tags(
+                state,
+                it.source_id,
+                it.tags,
+                include_weapon=not is_magic,
+            )
+            defense_tags = self.combat._get_defense_tags(state, it.target_id)
+
+            if is_magic:
+                raw_damage = max(
+                    1,
+                    int(it.amount) + int(v_atk.matk) - int(v_def.mdef),
+                )
+                dmg = self.combat.dmg.apply_tag_multiplier(
+                    raw_damage,
+                    attack_tags,
+                    defense_tags,
+                )
             else:
-                dmg, is_crit = self.combat.dmg.calc_phys_damage(v_atk.atk, v_def.def_, v_atk.crit, it.tags, [])
+                dmg, is_crit = self.combat.dmg.calc_phys_damage(
+                    v_atk.atk,
+                    v_def.def_,
+                    v_atk.crit,
+                    attack_tags,
+                    defense_tags,
+                )
 
             self.combat.say(f"{src_name} 對 {tgt_name} 造成 {dmg} 傷害" + ("（暴擊！）" if is_crit else ""))
 

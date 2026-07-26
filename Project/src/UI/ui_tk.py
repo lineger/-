@@ -367,9 +367,10 @@ class RosterPanel(ttk.Frame):
             data["stats"]["exp"] = getattr(npc, "exp", None) # exp/gold
             data["stats"]["gold"] = None # NPC 預設不顯示金錢
             
-            # Attr (來自 profile)
+            # Attr (NPCProfile.attr 與玩家 state.attr 使用相同結構)
+            npc_attr = getattr(npc, "attr", None)
             for k in ("STR","INT","CON","DEX","CHA","LCK"):
-                data["attr"][k] = getattr(npc, k, 0)
+                data["attr"][k] = getattr(npc_attr, k, 0)
 
             # Equipment (來自 profile)
             data["eq"] = getattr(npc, "equipment", {}) or {}

@@ -138,25 +138,32 @@ class DamageModel:
         self.spread_max = int(spread_max)
         self.rng = rng or random
 
-    def lookup_multiplier(self, atk_tags: set[str], def_tags: set[str]) -> float:
-        tags_table = (self.world.get("tags") or {})
+    def lookup_multiplier(self, atk_tags, def_tags) -> float:
+        tags_table = self.world.get("tags") or {}
+        atk_tags = set(atk_tags or [])
+        def_tags = set(def_tags or [])
+
         mult = 1.0
-        for a in atk_tags:
-            tag_def = tags_table.get(a)
-            if tag_def:
-                multipliers = tag_def.get("multipliers", {})
-                for d in def_tags:
-                    mult *= multipliers.get(d, 1.0)
+        for attack_tag in atk_tags:
+            tag_def = tags_table.get(attack_tag)
+            if not tag_def:
+                continue
+
+            multipliers = tag_def.get("multipliers", {})
+            for defense_tag in def_tags:
+                mult *= float(multipliers.get(defense_tag, 1.0))
         return mult
+
+    def apply_tag_multiplier(self, damage: int, atk_tags=None, def_tags=None) -> int:
+        """將標籤相剋倍率套用到已算出的傷害，不改變原本的傷害公式。"""
+        mult = self.lookup_multiplier(atk_tags, def_tags)
+        return max(1, int(round(int(damage) * mult)))
 
     def calc_phys_damage(self, base_atk: int, base_def: int, crit_pct: int,
                          atk_tags=None, def_tags=None) -> tuple[int, bool]:
-        atk_tags = set(atk_tags or [])
-        def_tags = set(def_tags or [])
         base = max(1, int(base_atk) - int(base_def))
         spread = base + self.rng.randint(self.spread_min, self.spread_max)
-        mult = self.lookup_multiplier(atk_tags, def_tags)
-        dmg = max(1, int(round(spread * mult)))
+        dmg = self.apply_tag_multiplier(spread, atk_tags, def_tags)
         is_crit = self.rng.randint(1, 100) <= max(0, int(crit_pct))
         if is_crit:
             dmg = int(dmg * self.crit_multiplier)
@@ -854,7 +861,7 @@ class CombatEngine:
                 return SimpleNamespace(atk=1, def_=0, matk=0, mdef=0, speed=3, crit=0)
             base = {
                 "atk": int(getattr(prof, "atk", 1)),
-                "def_": int(getattr(prof, "def_", 0)),
+                "def_": int(getattr(prof, "defense", 0)),
                 "matk": int(getattr(prof, "matk", 0)),
                 "mdef": int(getattr(prof, "mdef", 0)),
                 "speed": int(getattr(prof, "speed", 3)),
@@ -902,20 +909,88 @@ class CombatEngine:
         return SimpleNamespace(**base)
 
 
-    def _get_actor_weapon_id(self, state: GameState, actor_id: str) -> Optional[str]:
+    def _get_actor_equipment(self, state: GameState, actor_id: str) -> dict:
+        """取得戰鬥者目前裝備；不存在時回傳空字典。"""
         if actor_id == "$player":
-            return state.inventory.equipment.get("weapon")
-        
-        # 【修改】 檢查 actor_id 是否在敵人字典中
+            return dict(getattr(state.inventory, "equipment", {}) or {})
+
         if actor_id in state.combat.enemies:
             profile = state.combat.enemies.get(actor_id)
-            return profile.equipment.get("weapon") if profile else None
-            
-        # 盟友
-        prof = (getattr(state, "npc_profiles", {}) or {}).get(actor_id)
-        if prof:
-            return prof.equipment.get("weapon")
-        return None
+            return dict(getattr(profile, "equipment", {}) or {}) if profile else {}
+
+        profile = (getattr(state, "npc_profiles", {}) or {}).get(actor_id)
+        return dict(getattr(profile, "equipment", {}) or {}) if profile else {}
+
+    def _get_actor_weapon_id(self, state: GameState, actor_id: str) -> Optional[str]:
+        return self._get_actor_equipment(state, actor_id).get("weapon")
+
+    def _get_equipment_tags(
+        self,
+        state: GameState,
+        actor_id: str,
+        *,
+        slots=None,
+    ) -> set[str]:
+        tags: set[str] = set()
+        items = self.world.get("items") or {}
+        equipment = self._get_actor_equipment(state, actor_id)
+        selected_slots = set(slots) if slots is not None else set(equipment)
+
+        for slot, item_id in equipment.items():
+            if slot not in selected_slots or not item_id:
+                continue
+            item_def = items.get(item_id) or {}
+            tags.update(item_def.get("tags") or [])
+
+        return tags
+
+    def _get_intrinsic_tags(self, state: GameState, actor_id: str) -> set[str]:
+        """取得角色自身的材質、護甲類型或種族等防禦標籤。"""
+        if actor_id == "$player":
+            return set(getattr(state, "tags", set()) or set())
+
+        if actor_id in state.combat.enemies:
+            profile = state.combat.enemies.get(actor_id)
+            return set(getattr(profile, "traits", []) or []) if profile else set()
+
+        profile = (getattr(state, "npc_profiles", {}) or {}).get(actor_id)
+        profile_tags = getattr(profile, "traits", None) or getattr(profile, "tags", None)
+        if profile_tags:
+            return set(profile_tags)
+
+        npc_def = (self.world.get("npcs") or {}).get(actor_id) or {}
+        return set(npc_def.get("traits") or npc_def.get("tags") or [])
+
+    def _get_defense_tags(self, state: GameState, actor_id: str) -> set[str]:
+        """防禦標籤＝角色自身標籤＋防具／副手裝備標籤。"""
+        armor_tags = self._get_equipment_tags(
+            state,
+            actor_id,
+            slots={"body", "offhand"},
+        )
+        return self._get_intrinsic_tags(state, actor_id) | armor_tags
+
+    def _get_attack_tags(
+        self,
+        state: GameState,
+        actor_id: str,
+        action_tags=None,
+        *,
+        include_weapon: bool,
+    ) -> set[str]:
+        """
+        取得本次攻擊標籤。
+
+        普攻與物理技能可帶入武器標籤；魔法技能呼叫時應將
+        include_weapon 設為 False，避免長槍讓火球獲得穿刺屬性。
+        """
+        tags = set(action_tags or [])
+        if include_weapon:
+            weapon_id = self._get_actor_weapon_id(state, actor_id)
+            if weapon_id:
+                weapon_def = (self.world.get("items") or {}).get(weapon_id) or {}
+                tags.update(weapon_def.get("tags") or [])
+        return tags
 
     def _handle_on_hit_procs(self, state: GameState, attacker_id: str, target_id: str):
         weapon_id = self._get_actor_weapon_id(state, attacker_id)
@@ -932,7 +1007,7 @@ class CombatEngine:
         # 2. 如果沒有，才檢查：武器的 "tags" 是否符合「標籤總表」
         if not proc_def:
             weapon_tags = weapon_def.get("tags", [])
-            tags_table = self.world.get("tags", {}).get("tags", {})# <-- 從 world 讀取
+            tags_table = self.world.get("tags") or {}
             
             for tag in weapon_tags:
                 tag_def = tags_table.get(tag)
@@ -1008,7 +1083,17 @@ class CombatEngine:
             return {"ok": False}
 
         v_def = self._battle_view(state, target_id)
-        dmg, is_crit = self.dmg.calc_phys_damage(v_atk.atk, v_def.def_, v_atk.crit, [], [])
+        attack_tags = self._get_attack_tags(
+            state, actor_id, include_weapon=True
+        )
+        defense_tags = self._get_defense_tags(state, target_id)
+        dmg, is_crit = self.dmg.calc_phys_damage(
+            v_atk.atk,
+            v_def.def_,
+            v_atk.crit,
+            attack_tags,
+            defense_tags,
+        )
 
         # 【修正】消耗防禦狀態 (抵擋一次)
         if state.combat.defending.get(target_id, False):
@@ -1136,8 +1221,14 @@ class CombatEngine:
                 v_me = self._battle_view(state, enemy_id)
                 base_dmg = (v_me.matk if "magic" in tags else v_me.atk) + power
                 
-                player_tags = getattr(state, "tags", set())
-                mult = self.dmg.lookup_multiplier(tags, player_tags)
+                attack_tags = self._get_attack_tags(
+                    state,
+                    enemy_id,
+                    tags,
+                    include_weapon="magic" not in tags,
+                )
+                player_tags = self._get_defense_tags(state, pid)
+                mult = self.dmg.lookup_multiplier(attack_tags, player_tags)
                 final_dmg = base_dmg * mult
                 
                 score = final_dmg
@@ -1211,7 +1302,17 @@ class CombatEngine:
             # 普攻 fallback
             v_me = self._battle_view(state, enemy_id)
             v_target = self._battle_view(state, pid)
-            dmg, _ = self.dmg.calc_phys_damage(v_me.atk, v_target.def_, 0)
+            attack_tags = self._get_attack_tags(
+                state, enemy_id, include_weapon=True
+            )
+            defense_tags = self._get_defense_tags(state, pid)
+            dmg, _ = self.dmg.calc_phys_damage(
+                v_me.atk,
+                v_target.def_,
+                0,
+                attack_tags,
+                defense_tags,
+            )
             if state.combat.defending.get(pid): dmg //= 2; state.combat.defending[pid] = False
             
             _, res_p = self._actor_view(state, pid)

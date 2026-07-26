@@ -69,12 +69,6 @@ def _actor_lvl(state, actor_id):
 def _actor_attr(state, actor_id):
     if actor_id == "$player":
         return getattr(state, "attr", None)
+
     prof = (getattr(state, "npc_profiles", {}) or {}).get(actor_id)
-    # 你的設計是把 NPC 的六圍直接平展在 profile 上（STR/INT/...）
-    # 若想拿物件，也可以在建立 profile 時放一個 Attributes 物件；此處直接回傳 state.attr-like 的接口即可。
-    class _AttrView:
-        pass
-    av = _AttrView()
-    for k in ("STR","INT","CON","DEX","CHA","LCK"):
-        setattr(av, k, int(getattr(prof, k, 0)) if prof else 0)
-    return av
+    return getattr(prof, "attr", None) if prof else None
