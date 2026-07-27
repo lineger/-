@@ -1,8 +1,7 @@
 import tkinter as tk
 import time
-from commands import cmd_look, cmd_inv,cmd_go
-from System.combat_engine import CombatEngine , CooldownBox
-from System.equip_engine import EquipEngine
+from Application.game_queries import get_inventory_view, get_room_view
+from System.combat_engine import CooldownBox
 from Data.skills import list_actor_skills
 
 
@@ -130,16 +129,22 @@ class ActionMenu:
         else:
             ACTIONS = [("前往","go"),("對話","talk_open"),("使用","use"),("給予","give"),("查看","look"),
                    ("背包 ","inv"),("突擊","ambush"),("裝備","equip"),("任務","quest_log"),("結束","quit")]
-        for (label, verb) in ACTIONS:
-            btn = tk.Button(self.bar, text=label, command=lambda v=verb: self._choose_action(v))
+        tooltips = {
+            "cast": "施放技能：打開右側技能清單，滑到技能可看說明。",
+            "quest_log": "查看當前已接受和已完成的任務清單。",
+        }
+
+        for label, verb in ACTIONS:
+            btn = tk.Button(
+                self.bar,
+                text=label,
+                command=lambda v=verb: self._choose_action(v),
+            )
             btn.pack(side="left", padx=4, pady=4)
 
-            
-        if verb == "cast":
-            btn.tooltip_text = "施放技能：打開右側技能清單，滑到技能可看說明。"
-            
-        elif verb == "quest_log": # <--- 為任務日誌添加說明
-            btn.tooltip_text = "查看當前已接受和已完成的任務清單。"
+            tooltip = tooltips.get(verb)
+            if tooltip:
+                btn.tooltip_text = tooltip
 
     def _choose_action(self, verb):
         self.pending_verb   = verb
@@ -167,6 +172,18 @@ class ActionMenu:
         # after 需要一個「可呼叫物件」，不能在這裡就呼叫
         cb = self.io.refresh_all if hasattr(self.io, "refresh_all") else self.root.update
         self.root.after(0, cb)
+
+    def _show_room_summary(self):
+        view = get_room_view(self.world, self.state)
+        self.io.say(f"{view['name']}：{view['description']}")
+        if view["npc_names"]:
+            self.io.say("你看到：" + "、".join(view["npc_names"]))
+        self.io.say("出口：" + ("、".join(view["exits"]) if view["exits"] else "（無）"))
+
+    def _show_inventory_summary(self):
+        items = get_inventory_view(self.world, self.state)
+        names = [item["name"] for item in items]
+        self.io.say("背包：" + ("、".join(names) if names else "（空）"))
 
     def _select_skill_for_cast(self, skill_id: str):
         """
@@ -257,10 +274,10 @@ class ActionMenu:
 
         # ---- 非情境（立即執行）----
         if v == "look":
-            self._add_option("查看四周", lambda: cmd_look(self.io, self.world, self.state, ()))
+            self._add_option("查看四周", self._show_room_summary)
             return
         if v == "inv":
-            self._add_option("查看背包", lambda: cmd_inv(self.io, self.world, self.state, ()))
+            self._add_option("查看背包", self._show_inventory_summary)
             return
         if v == "quit":
             self._add_option("離開遊戲", lambda: self.root.quit())
@@ -367,14 +384,23 @@ class ActionMenu:
                 self._add_option("目前沒有可以使用的物品。", lambda: None)
             return
 
-        # ---- Go：列出可前往的方向（用既有 cmd_go 或 engine 的移動機制） ----
+        # ---- Go：列出可前往的方向，實際移動統一交給 NavigationSystem ----
         if v == "go":
-            for dir_, to_rid in (room.get("exits") or {}).items():
+            for direction, to_rid in (room.get("exits") or {}).items():
+                if not self.engine.can_fire(
+                    "go",
+                    self.state,
+                    direction=direction,
+                ):
+                    continue
+
                 to_room = self.world["rooms"].get(to_rid, {"name": to_rid})
-                # 這裡示範直接用 engine.fire("enter") 或你的 cmd_go
-                self._add_option(f"往 {dir_}（{to_room['name']}）", 
-                                 lambda d=dir_: self.io.on_go(d))  # 你可改成現有的移動函式
-            if not any(True for _ in self.list.winfo_children()):
+                self._add_option(
+                    f"往 {direction}（{to_room['name']}）",
+                    lambda d=direction: self.io.on_go(d),
+                )
+
+            if not self.list.winfo_children():
                 self._add_option("沒有可去的方向。", lambda: None)
             return
 

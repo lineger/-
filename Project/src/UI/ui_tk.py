@@ -3,35 +3,10 @@
 import math
 import tkinter as tk
 from tkinter import ttk
-from typing import List, Tuple, Callable
 # 【注意】請確認這行導入是否正確，如果您的 menu2.py 在同一目錄下，可能需要改為：from .menu2 import ActionMenu
 from UI.menu2 import ActionMenu 
 # 【新增】 引入 CombatantProfile 型別提示
 from Data.state import CombatantProfile 
-
-# ------- 可捲動的按鈕區（舊版用） -------
-class ScrollButtons(ttk.Frame):
-    def __init__(self, master, **kwargs):
-        super().__init__(master, **kwargs)
-        self.canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0)
-        self.scroll = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.inner = ttk.Frame(self.canvas)
-        self.inner.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.canvas.create_window((0,0), window=self.inner, anchor="nw")
-        self.canvas.configure(yscrollcommand=self.scroll.set)
-        self.canvas.pack(side="left", fill="both", expand=True)
-        self.scroll.pack(side="right", fill="y")
-        self.buttons: List[ttk.Button] = []
-
-    def set_buttons(self, items: List[Tuple[str, Callable[[], None]]]):
-        for b in self.buttons:
-            b.destroy()
-        self.buttons.clear()
-        for label, action in items:
-            btn = ttk.Button(self.inner, text=label, command=action)
-            btn.pack(fill="x", padx=4, pady=2)
-            self.buttons.append(btn)
-
 
 _COMPASS = {
     "n": (0, -1), "north": (0, -1),
@@ -528,7 +503,7 @@ class RosterPanel(ttk.Frame):
 
 # ------- 主視窗 -------
 class TkApp(tk.Tk):
-    def __init__(self, world, engine, state, build_menu_fn=None, use_action_menu=True):
+    def __init__(self, world, engine, state):
         super().__init__()
 
         # --- 【新增】 背景圖片載入與設定 ---
@@ -611,40 +586,42 @@ class TkApp(tk.Tk):
                                padx=10, pady=10)
         self.txt_log.pack(fill="both", expand=True)
 
-        # 右側：兩種模式擇一
-        self.use_action_menu = use_action_menu
-        self.build_menu_fn = build_menu_fn
+        # 右側：固定使用新版 ActionMenu
+        self.right_col = ttk.Frame(self)
+        self.right_col.pack(side="right", fill="y", padx=6, pady=6)
 
-        
-        if self.use_action_menu:
-            # --- 右欄容器 ---
-            self.right_col = ttk.Frame(self)
-            self.right_col.pack(side="right", fill="y", padx=6, pady=6)
+        # 1) 情境動作選單
+        self.action_menu = ActionMenu(
+            self.right_col,
+            self,
+            self.engine,
+            self.world,
+            self.state,
+        )
 
-            # 上：ActionMenu or 舊版清單
-            self.use_action_menu = use_action_menu
-            self.build_menu_fn = build_menu_fn
-            if self.use_action_menu:
-                # 把 ActionMenu 裝在 right（不是 root），這樣小地圖能跟在其下方
-                self.action_menu = ActionMenu(self.right_col, self, self.engine, self.world, self.state)
-            else:
-                ttk.Label(self.right_col, text="可執行的動作", font=("Noto Sans CJK TC", 12, "bold")).pack(anchor="w")
-                self.menu_panel = ScrollButtons(self.right_col)
-                self.menu_panel.pack(fill="y", expand=True, pady=(4,8))
+        # 2) 隊伍狀態（永遠在按鍵列下面）
+        self.roster = RosterPanel(
+            self.right_col,
+            self.world,
+            self.engine,
+            self.state,
+            self.refresh_all,
+        )
+        self.roster.pack(fill="x", pady=(6, 6))
 
-            # 2) 隊伍狀態（永遠在按鍵列下面）
-            self.roster = RosterPanel(self.right_col, self.world, self.engine, self.state, self.refresh_all)
-            self.roster.pack(fill="x", pady=(6, 6))
+        # 3) 彈性空白：撐開讓地圖貼底
+        ttk.Frame(self.right_col).pack(fill="both", expand=True)
 
-            # 3) 彈性空白：撐開讓地圖貼底
-            ttk.Frame(self.right_col).pack(fill="both", expand=True)
-
-            # 4) 右下角固定方位小地圖
-            self.map_positions = compute_grid_positions(self.world)
-            self.minimap = FixedMiniMap(self.right_col, self.world, self.state,
-                                        on_click_neighbor=self._try_go_room,
-                                        positions=self.map_positions)
-            self.minimap.pack(fill="x", side="bottom")
+        # 4) 右下角固定方位小地圖
+        self.map_positions = compute_grid_positions(self.world)
+        self.minimap = FixedMiniMap(
+            self.right_col,
+            self.world,
+            self.state,
+            on_click_neighbor=self._try_go_room,
+            positions=self.map_positions,
+        )
+        self.minimap.pack(fill="x", side="bottom")
         
         # === 【修改】 戰鬥：敵人狀態 ===
         
@@ -692,23 +669,9 @@ class TkApp(tk.Tk):
         self.txt_desc.insert("end", desc)
         self.txt_desc.config(state="disabled")
 
-    # --- 右側渲染（兩種模式） ---
+    # --- 右側動作選單渲染 ---
     def render_menu(self):
-        if self.use_action_menu:
-            # 新版：交給 ActionMenu 自己刷新
-            self.action_menu._populate_context()
-        else:
-            # 舊版：用 build_menu_fn 產生 options
-            options = self.build_menu_fn(self, self.engine, self.world, self.state)
-            wrapped = []
-            for label, action in options:
-                def _wrap(act=action):
-                    act()
-                    self.refresh_all()
-                wrapped.append((label, _wrap))
-            wrapped.append(("重新整理", self.refresh_all))
-            wrapped.append(("退出遊戲", self.destroy))
-            self.menu_panel.set_buttons(wrapped)
+        self.action_menu._populate_context()
 
     # 【移除】 render_status(self)
     # 這個函數的功能已經被 RosterPanel.render() 取代，
@@ -810,39 +773,30 @@ class TkApp(tk.Tk):
         if hasattr(self, "minimap"):
             self.minimap.render()
             
-    # 給 ActionMenu 使用的移動方法
-    def on_go(self, dir_):
-        cur = self.world["rooms"][self.state.room_id]
-        to = cur.get("exits", {}).get(dir_)
-        if not to:
-            self.say("那個方向走不通。")
-            return
-        self.state.room_id = to
-        if hasattr(self.state, "visited_rooms"):
-            self.state.visited_rooms.add(to)
+    # 給 ActionMenu 使用的移動 callback；遊戲規則由 NavigationSystem 處理。
+    def on_go(self, direction: str):
+        result = self.engine.fire(
+            "go",
+            self.state,
+            direction=direction,
+        )
+        if isinstance(result, dict) and result.get("ok", False):
+            self.refresh_all()
 
-        # 【新增】移動後檢查遭遇
-        if self.engine.combat.check_encounter(self.state):
-            self.refresh_all() # 如果觸發戰鬥，立即刷新顯示戰鬥介面
-        else:
-            self.refresh_all() # 沒觸發也刷新（顯示新房間）
-        
-
-    # 供小地圖點擊：只允許相鄰房間（避免瞬移）
+    # 供小地圖點擊：只允許相鄰房間（避免瞬移）。
     def _try_go_room(self, target_rid: str):
-        cur_exits = (self.world["rooms"].get(self.state.room_id, {}).get("exits") or {})
-        if target_rid in cur_exits.values():
-            # 小提示
-            name = self.world["rooms"].get(target_rid, {}).get("name", target_rid)
-            self.say(f"你前往「{name}」。")
-            self.state.room_id = target_rid
-            if hasattr(self.state, "visited_rooms"):
-                self.state.visited_rooms.add(target_rid)
-                
-            # 【新增】移動後檢查遭遇
-            if self.engine.combat.check_encounter(self.state):
-                self.refresh_all()
-            else:
-                self.refresh_all()
-        else:
+        exits = (
+            self.world["rooms"]
+            .get(self.state.room_id, {})
+            .get("exits")
+            or {}
+        )
+        direction = next(
+            (name for name, room_id in exits.items() if room_id == target_rid),
+            None,
+        )
+        if direction is None:
             self.say("（只能點擊相鄰房間移動）")
+            return
+
+        self.on_go(direction)

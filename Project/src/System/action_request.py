@@ -33,6 +33,7 @@ class ActionRequest:
     action: str | None = None
     topic_id: str | None = None
     quest_id: str | None = None
+    direction: str | None = None
 
     # 情緒系統
     emotion: str | None = None
@@ -43,7 +44,10 @@ class ActionRequest:
 
     RULES: ClassVar[Mapping[str, ActionRule]] = {
         # Engine / event hooks
-        "go": ActionRule(),
+        "go": ActionRule(
+            frozenset({"direction"}),
+            frozenset({"direction"}),
+        ),
         "enter": ActionRule(),
 
         # SimpleSystem
@@ -118,6 +122,7 @@ class ActionRequest:
         "topic_id",
         "quest_id",
         "emotion",
+        "direction",
     })
     _INT_FIELDS: ClassVar[FrozenSet[str]] = frozenset({"delta", "rate", "max_labels"})
 

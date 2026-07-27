@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import replace
 from typing import List, Dict, Any
 from System.Skill.skills_core import Intent, SkillSpec, CombatLike
 from System.Skill.skills_simple import GenericSkill
@@ -48,16 +49,41 @@ class SkillRuntime:
 
         intents = spec.make_intents(self.combat, state, caster_id, final_targets)
     
-        # ★ 在施放開始時快照當前敵人 (複數)
-        enemy_ids_at_cast = list(state.combat.enemies.keys())
+        # 施放開始時快照敵人 ID，用來辨識哪些 intent 原本是敵方目標。
+        # 原目標倒下後，後續攻擊段會改鎖定另一名存活敵人；
+        # 原本附著在舊目標上的狀態等非傷害效果則直接略過。
+        enemy_ids_at_cast = set(state.combat.enemies)
+        retargeted_enemies: dict[str, str] = {}
 
         for it in intents:
-            # ★ 若戰鬥已結束，或是這個 intent 要打的就是那個敵人但敵人已不存在→直接中斷
             if not self.combat.in_battle(state):
                 break
-            if it.target_id == enemy_ids_at_cast and getattr(state.combat, "enemy_id", None) != enemy_id_at_cast:
-                break
-            self._apply_intent(state, it)
+
+            resolved_intent = it
+            target_was_enemy = it.target_id in enemy_ids_at_cast
+            target_is_gone = (
+                target_was_enemy
+                and it.target_id not in state.combat.enemies
+            )
+
+            if target_is_gone:
+                if it.kind != "damage":
+                    continue
+
+                new_target = retargeted_enemies.get(it.target_id)
+                if new_target not in state.combat.enemies:
+                    new_target = self._choose_retarget_enemy(state)
+                    if new_target is None:
+                        break
+                    retargeted_enemies[it.target_id] = new_target
+                    self.combat.say(
+                        f"（原目標已倒下，技能轉向 "
+                        f"{self.combat._name_of(state, new_target)}）"
+                    )
+
+                resolved_intent = replace(it, target_id=new_target)
+
+            self._apply_intent(state, resolved_intent)
 
         cd = int(spec.cooldown or 0)
         if cd > 0: self._cds(state).set(caster_id, spec.id, cd)
@@ -67,6 +93,18 @@ class SkillRuntime:
 
             
         return {"ok": True}
+
+    def _choose_retarget_enemy(self, state) -> str | None:
+        candidates = list(state.combat.enemies)
+        if not candidates:
+            return None
+
+        rng = getattr(getattr(self.combat, "dmg", None), "rng", None)
+        choose = getattr(rng, "choice", None)
+        if callable(choose):
+            return choose(candidates)
+
+        return candidates[0]
 
     # === Intent → Combat 決算 ===
     def _apply_intent(self, state, it: Intent):

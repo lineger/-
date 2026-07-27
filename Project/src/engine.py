@@ -8,6 +8,7 @@ from System.talk_system import TalkSystem
 from System.emotion_system import EmotionSystem
 from System.team_system import TeamSystem
 from System.quest_system import QuestSystem
+from System.navigation_system import NavigationSystem
 from Data.derive import recompute_derived
 from Data.state import GameState
 
@@ -206,6 +207,7 @@ class Engine:
         self.talk = TalkSystem()
         self.team = TeamSystem()
         self.quest = QuestSystem()
+        self.navigation = NavigationSystem()
 
         
         self.hub.register(self.combat)
@@ -215,6 +217,7 @@ class Engine:
         self.hub.register(self.talk)
         self.hub.register(self.team)
         self.hub.register(self.quest)
+        self.hub.register(self.navigation)
         
 
         self.hub.attach_all(say=self.say, world=self.world, hub=self.hub)
@@ -297,7 +300,8 @@ class Engine:
         success, text = self._result_info(result)
 
         # 2. 執行事件系統（如果沒有被核心系統攔截）
-        if self._try_fire_events(request, state):
+        event_fired = self._try_fire_events(request, state)
+        if event_fired:
             pass
         elif success:
             if text:
@@ -308,12 +312,18 @@ class Engine:
         else:
             self.say("沒有發生什麼事。")
 
-        # 3. 呼叫任務檢查鉤子
-        if hasattr(self, "quest") and hasattr(self.quest, "quest_check"):
+        action_succeeded = success or event_fired
+
+        # 3. 只有成功的動作才更新任務，避免失敗嘗試誤算進度。
+        if (
+            action_succeeded
+            and hasattr(self, "quest")
+            and hasattr(self.quest, "quest_check")
+        ):
             self.quest.quest_check(state, request)
 
-        # 4. 處理 go 動作後的 enter 事件
-        if request.verb == "go":
+        # 4. 只有真的完成移動，才處理新房間的 enter 事件。
+        if request.verb == "go" and success:
             self._try_fire_events(ActionRequest.build("enter"), state)
 
         return result
