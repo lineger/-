@@ -18,7 +18,7 @@
   },
 
   "combat": { "hp": 18, "atk": 2, "def": 1, "speed": 3 },
-  "tags": ["human", "civilian"],
+  "tags": ["human"],
 
   "skills": ["heal_small","weaken"],
 
@@ -31,5 +31,6 @@
   },
   "gifts": {
     "wheat": { "reply": "太好了！這是剛出爐的麵包。", "reward_item": "bread", "consume": true }
-  }
+  },
+  "roles": ["baker", "artisan", "merchant", "civilian"]
 }

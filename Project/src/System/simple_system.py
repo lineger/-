@@ -7,7 +7,7 @@ from System.action_request import ActionRequest
 class SimpleSystem:
     """
     最小可跑版：
-    - 支援 verbs: talk / give / use（先從 talk 打通 UI）
+    - 支援 verbs: talk / use（送禮由 TalkSystem 的 gift verb 負責）
     - can_fire：讓 UI 能判斷有哪些行為可做
     - fire：目前只做極簡回饋（不動狀態），之後再逐步充實
 
@@ -16,7 +16,7 @@ class SimpleSystem:
       - 原本 state.stats 為 dict，改為 dataclass：state.stats.hp / mp / gold
       - 上限值以 state.derived.max_hp（與可選的 max_mp）做鉗制
     """
-    verbs = ("talk", "give", "use")
+    verbs = ("talk", "use")
     priority = 10
 
     def __init__(self, world=None, say=None):
@@ -34,12 +34,6 @@ class SimpleSystem:
         item_id = request.item_id
         target_id = request.target_id
         w = self.world or {}
-
-        if verb == "give":
-            # 要有目標、物品存在於世界，且玩家背包有該物品
-            return bool(target_id and item_id) and \
-                   (item_id in (w.get("items") or {})) and \
-                   (item_id in state.inventory.items)
 
         if verb == "use":
             if not item_id:
@@ -69,15 +63,6 @@ class SimpleSystem:
             dls = npc.get("dialogues") or []
             msg = dls[0] if dls else None
             say(msg or f"{name}：……")
-            return True
-
-        if verb == "give" and target_id and item_id:
-            if item_id not in state.inventory.items:
-                say("你沒有那個物品。"); return True
-            #（最小版：先只回饋，不做禮物規則與好感，之後再接）
-            npc = (w.get("npcs") or {}).get(target_id, {})
-            name = npc.get("name", target_id)
-            say(f"你遞出了 {item_id} 給 {name}。")
             return True
 
         if verb == "use" and item_id:

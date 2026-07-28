@@ -5,7 +5,7 @@ from System.systems_hub import BaseSystem
 
 class TalkSystem(BaseSystem):
     # 讓 Hub 快篩；保持與你的路由介面一致
-    verbs: tuple[str, ...] = ("talk_open", "talk_say", "talk_give")
+    verbs: tuple[str, ...] = ("talk_open", "talk_say", "gift")
     priority: int = 0  # 需要的話可調高
 
     # 避免在 __init__ 時調用 _emo 導致 RuntimeError
@@ -39,11 +39,18 @@ class TalkSystem(BaseSystem):
             return request.target_id is not None
         if request.verb == "talk_say":
             return request.target_id is not None and request.topic_id is not None
-        if request.verb == "talk_give":
+        if request.verb == "gift":
+            npc_id = request.target_id
+            item_id = request.item_id
+            if not npc_id or not item_id:
+                return False
+            npc = (self.world.get("npcs") or {}).get(npc_id)
+            if not npc or item_id not in (npc.get("gifts") or {}):
+                return False
+            room = (self.world.get("rooms") or {}).get(state.room_id, {})
             return (
-                request.target_id is not None
-                and request.item_id is not None
-                and request.item_id in getattr(state.inventory, "items", [])
+                npc_id in (room.get("npcs") or [])
+                and item_id in getattr(state.inventory, "items", [])
             )
         return False
 
@@ -52,8 +59,8 @@ class TalkSystem(BaseSystem):
             return self.open(state, request.target_id)
         if request.verb == "talk_say":
             return self.say_topic(state, request.target_id, request.topic_id)
-        if request.verb == "talk_give":
-            return self.give(state, request.target_id, request.item_id)
+        if request.verb == "gift":
+            return self.gift(state, request.target_id, request.item_id)
         return {"ok": False, "text": f"TalkSystem 不支援 verb={request.verb}"}
 
     # ========== 外部 API ==========
@@ -70,7 +77,7 @@ class TalkSystem(BaseSystem):
         primary = labels[0] if labels else "reserved"
 
         options = self._collect_topics_for_ui(state, npc_id, npc)
-        giftable = bool(npc.get("gifts")) or True  # 你要更嚴格可自行調整
+        giftable = bool(npc.get("gifts"))
 
         return {
             "ok": True,
@@ -104,7 +111,7 @@ class TalkSystem(BaseSystem):
 
         return {"ok": True, "text": text}
 
-    def give(self, state, npc_id: str, item_id: str) -> dict:
+    def gift(self, state, npc_id: str, item_id: str) -> dict:
         npc   = (self.world.get("npcs") or {}).get(npc_id, {})
         gifts = npc.get("gifts", {})  # {item_id: {"joy":+x, "trust":+y, "reply":"...", "reward_item": "...", "consume": true}}
         rule  = gifts.get(item_id)

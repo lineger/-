@@ -23,5 +23,6 @@
       "reward_item": "dagger",
       "consume": true
     }
-  }
+  },
+  "roles": ["blacksmith", "artisan", "merchant", "civilian"]
 }

@@ -17,5 +17,6 @@
       "once": true
     }
   },
-  "gifts": {}
+  "gifts": {},
+  "roles": ["elder", "civilian"]
 }

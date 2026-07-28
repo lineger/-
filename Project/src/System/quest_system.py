@@ -1,22 +1,22 @@
 # Project/src/System/quest_system.py
 
-from typing import List, Tuple, Optional, Dict, Any, Set
+from typing import List, Dict, Any, Set
 from System.action_request import ActionRequest
 from System.systems_hub import BaseSystem
 from Data.state import GameState # 假設 GameState 已經有 quest 屬性
-import traceback
 
 class QuestSystem(BaseSystem):
     """
     任務系統：管理任務狀態、進度更新、完成與獎勵發放。
     
-    Hub Verb: 
+    Hub Verb:
     - quest_log: 檢視任務日誌
     - quest_accept: 接受任務（通常由 TalkSystem/Events 呼叫）
-    - quest_check: 檢查進度與完成（由 Engine 呼叫）
+    - deliver: 將任務物品交給符合 NPC id 或 social role 的收件者
+    - quest_check: 檢查其他行動造成的進度與完成（由 Engine 呼叫）
     """
     # 高優先級，確保在其他系統處理動作後，任務能及時檢查進度。
-    verbs: tuple[str, ...] = ("quest_log", "quest_accept")
+    verbs: tuple[str, ...] = ("quest_log", "quest_accept", "deliver")
     priority: int = 80 
     
     def __init__(self, **_):
@@ -89,11 +89,115 @@ class QuestSystem(BaseSystem):
             and quest_id not in state.quest.completed
         )
 
+    def _recipient_matches(
+        self,
+        state: GameState,
+        task: Dict[str, Any],
+        npc_id: str | None,
+    ) -> bool:
+        if not npc_id:
+            return False
+
+        npc = (self.world.get("npcs") or {}).get(npc_id)
+        if not npc:
+            return False
+
+        room = (self.world.get("rooms") or {}).get(state.room_id, {})
+        if npc_id not in (room.get("npcs") or []):
+            return False
+
+        target_npc = task.get("target_npc")
+        if target_npc is not None:
+            return npc_id == target_npc
+
+        target_role = task.get("target_role")
+        if target_role is not None:
+            return target_role in set(npc.get("roles") or [])
+
+        return True
+
+    def _find_delivery_task(
+        self,
+        state: GameState,
+        quest_id: str | None,
+        item_id: str | None,
+        npc_id: str | None,
+    ) -> tuple[int, Dict[str, Any]] | None:
+        if not quest_id or not item_id or not npc_id:
+            return None
+        if item_id not in getattr(state.inventory, "items", []):
+            return None
+
+        tasks = state.quest.active.get(quest_id)
+        if not tasks:
+            return None
+
+        for index, task in enumerate(tasks):
+            if task.get("type") != "deliver_item":
+                continue
+            if task.get("target") != item_id:
+                continue
+            if int(task.get("progress", 0)) >= int(task.get("count", 1)):
+                continue
+            if not self._recipient_matches(state, task, npc_id):
+                continue
+            return index, task
+        return None
+
+    def _can_deliver(
+        self,
+        state: GameState,
+        quest_id: str | None,
+        item_id: str | None,
+        npc_id: str | None,
+    ) -> bool:
+        return self._find_delivery_task(state, quest_id, item_id, npc_id) is not None
+
+    def list_deliveries(self, state: GameState, npc_id: str) -> List[Dict[str, Any]]:
+        """列出玩家目前能交給指定 NPC 的任務物品；供 UI 顯示，不修改狀態。"""
+        out: List[Dict[str, Any]] = []
+        inventory = getattr(state.inventory, "items", [])
+        if not inventory:
+            return out
+
+        for quest_id, tasks in state.quest.active.items():
+            qdef = self.quests.get(quest_id, {})
+            for task in tasks:
+                item_id = task.get("target")
+                if (
+                    task.get("type") != "deliver_item"
+                    or not item_id
+                    or item_id not in inventory
+                    or int(task.get("progress", 0)) >= int(task.get("count", 1))
+                    or not self._recipient_matches(state, task, npc_id)
+                ):
+                    continue
+
+                item = (self.world.get("items") or {}).get(item_id, {})
+                out.append({
+                    "quest_id": quest_id,
+                    "quest_name": qdef.get("name", quest_id),
+                    "item_id": item_id,
+                    "item_name": item.get("name", item_id),
+                    "remaining": max(
+                        0,
+                        int(task.get("count", 1)) - int(task.get("progress", 0)),
+                    ),
+                })
+        return out
+
     def can_fire(self, request: ActionRequest, state) -> bool:
         if request.verb == "quest_log":
             return True
         if request.verb == "quest_accept":
             return self._can_accept(state, request.quest_id)
+        if request.verb == "deliver":
+            return self._can_deliver(
+                state,
+                request.quest_id,
+                request.item_id,
+                request.target_id,
+            )
         return False
 
     def fire(self, request: ActionRequest, state):
@@ -101,6 +205,13 @@ class QuestSystem(BaseSystem):
             return self._fire_log(state)
         if request.verb == "quest_accept":
             return self._fire_accept(state, request.quest_id)
+        if request.verb == "deliver":
+            return self._fire_deliver(
+                state,
+                request.quest_id,
+                request.item_id,
+                request.target_id,
+            )
         return {"ok": False}
         
     def _fire_log(self, state: GameState):
@@ -124,7 +235,23 @@ class QuestSystem(BaseSystem):
                     
                     if t_type == "collect_item":
                         item_name = self.world.get("items", {}).get(target, {}).get("name", target)
-                        progress_text = f"    - 交付物品 {item_name}: {current}/{total}"
+                        progress_text = f"    - 收集物品 {item_name}: {current}/{total}"
+                    elif t_type == "deliver_item":
+                        item_name = self.world.get("items", {}).get(target, {}).get("name", target)
+                        if t.get("target_npc"):
+                            recipient = self.world.get("npcs", {}).get(
+                                t["target_npc"], {}
+                            ).get("name", t["target_npc"])
+                        elif t.get("target_role"):
+                            recipient = self.world.get("roles", {}).get(
+                                t["target_role"], {}
+                            ).get("name", t["target_role"])
+                        else:
+                            recipient = "任意對象"
+                        progress_text = (
+                            f"    - 將 {item_name} 交給 {recipient}: "
+                            f"{current}/{total}"
+                        )
                     elif t_type == "talk_to_npc":
                         npc_name = self.world.get("npcs", {}).get(target, {}).get("name", target)
                         topic_id = t.get("item_id")
@@ -151,6 +278,45 @@ class QuestSystem(BaseSystem):
         
         self.say("\n".join(log))
         return {"ok": True}
+
+    def _fire_deliver(
+        self,
+        state: GameState,
+        quest_id: str,
+        item_id: str,
+        npc_id: str,
+    ):
+        found = self._find_delivery_task(state, quest_id, item_id, npc_id)
+        if found is None:
+            return {"ok": False, "text": "這件物品目前不能交給對方。"}
+
+        _, task = found
+        try:
+            state.inventory.items.remove(item_id)
+        except (AttributeError, ValueError):
+            return {"ok": False, "text": "你沒有這件物品。"}
+
+        current = int(task.get("progress", 0))
+        total = int(task.get("count", 1))
+        new_progress = min(total, current + 1)
+        task["progress"] = new_progress
+
+        item_name = self.world.get("items", {}).get(item_id, {}).get("name", item_id)
+        npc_name = self.world.get("npcs", {}).get(npc_id, {}).get("name", npc_id)
+        quest_name = self.quests.get(quest_id, {}).get("name", quest_id)
+
+        self.say(f"你把 {item_name} 交給了 {npc_name}。")
+        self.say(f"任務 [{quest_name}] 進度更新：{new_progress}/{total}")
+        self._check_completion(state, quest_id)
+
+        return {
+            "ok": True,
+            "quest_id": quest_id,
+            "item_id": item_id,
+            "target_id": npc_id,
+            "progress": new_progress,
+            "count": total,
+        }
 
     def _fire_accept(self, state: GameState, quest_id: str):
         if not self._can_accept(state, quest_id):
@@ -195,16 +361,12 @@ class QuestSystem(BaseSystem):
                 if verb == "go" and task.get("type") == "go_to_room" and state.room_id == task.get("target"):
                     progress_change = target_count 
                     
-                # 2. 交付物品 (collect_item) - 依賴 give 成功
-                elif verb == "give" and task.get("type") == "collect_item" and item_id == task.get("target"):
-                    progress_change = 1
-                
-                # 3. 與NPC對話 (talk_to_npc)
+                # 2. 與NPC對話 (talk_to_npc)
                 elif verb == "talk_say" and task.get("type") == "talk_to_npc" and target_id == task.get("target"):
                     if task.get("item_id") is None or task.get("item_id") == item_id:
                         progress_change = target_count 
                 
-                # 4. 擊敗怪物 (defeat_monster) - 需與 Combat 整合
+                # 3. 擊敗怪物 (defeat_monster) - 需與 Combat 整合
                 # 假設 CombatEngine 在敵人死亡時呼叫 quest_check(..., "combat_end", enemy_id=enemy_id)
                 # elif verb == "combat_end" and task.get("type") == "defeat_monster" and target_id == task.get("target"):
                 #     progress_change = 1

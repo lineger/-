@@ -23,5 +23,6 @@
       "reward_item": "apple",
       "consume": true
     }
-  }
+  },
+  "roles": ["farmer", "civilian"]
 }

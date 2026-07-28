@@ -1,0 +1,60 @@
+{
+  "roles": {
+    "artisan": {
+      "name": "工匠",
+      "description": "以技藝製作或修繕物品的人。"
+    },
+    "baker": {
+      "name": "麵包師",
+      "description": "製作麵包與烘焙食品的人。"
+    },
+    "bard": {
+      "name": "吟遊詩人",
+      "description": "以音樂、故事與表演維生的人。"
+    },
+    "blacksmith": {
+      "name": "鐵匠",
+      "description": "鍛造與修理金屬器具的人。"
+    },
+    "child": {
+      "name": "孩童",
+      "description": "尚未成年的城鎮居民。"
+    },
+    "civilian": {
+      "name": "平民",
+      "description": "不隸屬戰鬥職務的一般居民。"
+    },
+    "construct": {
+      "name": "構裝體",
+      "description": "由人工或魔法製成、並非自然出生的存在。"
+    },
+    "elder": {
+      "name": "長者",
+      "description": "年長且常被社群視為閱歷豐富的人。"
+    },
+    "farmer": {
+      "name": "農夫",
+      "description": "耕作土地並生產農作物的人。"
+    },
+    "hunter": {
+      "name": "獵人",
+      "description": "追蹤、狩獵並處理野外資源的人。"
+    },
+    "innkeeper": {
+      "name": "旅店主人",
+      "description": "經營旅店並接待旅客的人。"
+    },
+    "merchant": {
+      "name": "商人",
+      "description": "從事商品買賣或交換的人。"
+    },
+    "priest": {
+      "name": "祭司",
+      "description": "主持宗教儀式並服務信眾的人。"
+    },
+    "religious": {
+      "name": "宗教人士",
+      "description": "隸屬宗教組織或履行宗教職務的人。"
+    }
+  }
+}

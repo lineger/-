@@ -26,5 +26,6 @@
       "reward_item": "bread",
       "consume": true
     }
-  }
+  },
+  "roles": ["innkeeper", "merchant", "civilian"]
 }

@@ -52,10 +52,6 @@ class ActionRequest:
 
         # SimpleSystem
         "talk": ActionRule(frozenset({"target_id"}), frozenset({"target_id"})),
-        "give": ActionRule(
-            frozenset({"item_id", "target_id"}),
-            frozenset({"item_id", "target_id"}),
-        ),
         "use": ActionRule(
             frozenset({"item_id", "target_id"}),
             frozenset({"item_id"}),
@@ -67,7 +63,7 @@ class ActionRequest:
             frozenset({"target_id", "topic_id"}),
             frozenset({"target_id", "topic_id"}),
         ),
-        "talk_give": ActionRule(
+        "gift": ActionRule(
             frozenset({"target_id", "item_id"}),
             frozenset({"target_id", "item_id"}),
         ),
@@ -92,6 +88,10 @@ class ActionRequest:
         # QuestSystem
         "quest_log": ActionRule(),
         "quest_accept": ActionRule(frozenset({"quest_id"}), frozenset({"quest_id"})),
+        "deliver": ActionRule(
+            frozenset({"quest_id", "item_id", "target_id"}),
+            frozenset({"quest_id", "item_id", "target_id"}),
+        ),
 
         # EmotionSystem
         "emotion_add": ActionRule(

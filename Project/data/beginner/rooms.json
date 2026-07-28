@@ -83,7 +83,7 @@
     "desc": "厚重的木門通往城外田野，有守衛巡邏。",
     "exits": { "north": "town_square", "south": "field" },
     "npcs": ["hunter_ray"],
-    "items": ["gate_pass"],
+    "items": [],
     "tags": ["gate", "outdoor"]
   },
   "field": {

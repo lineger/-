@@ -23,5 +23,6 @@
       "reward_item": "silver_cross",
       "consume": true
     }
-  }
+  },
+  "roles": ["bard", "civilian"]
 }

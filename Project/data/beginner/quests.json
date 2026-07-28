@@ -4,7 +4,7 @@
       "name": "醉鬼的聖水",
       "desc": "醉醺醺的吟遊詩人想要聖水。聖水在教堂前庭。",
       "tasks": [
-        { "type": "collect_item", "target": "holy_water", "count": 1 }
+        { "type": "deliver_item", "target": "holy_water", "count": 1, "target_role": "bard" }
       ],
       "rewards": [
         { "type": "exp", "amount": 10 },

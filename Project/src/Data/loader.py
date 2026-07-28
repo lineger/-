@@ -120,6 +120,40 @@ def _load_events(path_or_dir: str) -> Dict[str, Any]:
 
     raise FileNotFoundError(path_or_dir)
 
+
+
+def _validate_role_references(roles: Dict[str, Any], npcs: Dict[str, Any], quests: Dict[str, Any]) -> None:
+    """驗證社交 role 的集中定義與引用關係。"""
+    for npc_id, npc in npcs.items():
+        npc_roles = npc.get("roles", [])
+        if not isinstance(npc_roles, list) or any(not isinstance(role_id, str) or not role_id for role_id in npc_roles):
+            raise ValueError(f"NPC {npc_id!r} 的 roles 必須是非空字串列表")
+        unknown = sorted(set(npc_roles) - set(roles))
+        if unknown:
+            raise ValueError(f"NPC {npc_id!r} 引用了未定義 role：{', '.join(unknown)}")
+
+    for quest_id, quest in quests.items():
+        for index, task in enumerate(quest.get("tasks", [])):
+            if task.get("type") != "deliver_item":
+                continue
+
+            target_npc = task.get("target_npc")
+            target_role = task.get("target_role")
+            if target_npc and target_role:
+                raise ValueError(
+                    f"任務 {quest_id!r} 的第 {index + 1} 個 deliver_item "
+                    "不能同時指定 target_npc 與 target_role"
+                )
+            if target_npc and target_npc not in npcs:
+                raise ValueError(
+                    f"任務 {quest_id!r} 引用了不存在的 target_npc：{target_npc!r}"
+                )
+            if target_role and target_role not in roles:
+                raise ValueError(
+                    f"任務 {quest_id!r} 引用了未定義 target_role：{target_role!r}"
+                )
+
+
 def load_world(base="../data/beginner"):
     """
     自動偵測兩種布局：
@@ -131,6 +165,12 @@ def load_world(base="../data/beginner"):
     if not os.path.exists(tags_path):
         tags_path = os.path.join(base, "tags.json")    
     tags = _load_collection(tags_path, key_name="tags")
+
+    # social roles（與戰鬥 tags 平行，但資料與用途完全分離）
+    roles_path = os.path.join(base, "roles")
+    if not os.path.exists(roles_path):
+        roles_path = os.path.join(base, "roles.json")
+    roles = _load_collection(roles_path, key_name="roles")
 
     # status_effects
     status_effects_path = os.path.join(base, "status_effects.json")
@@ -181,4 +221,16 @@ def load_world(base="../data/beginner"):
         events_path = alt if os.path.exists(alt) else os.path.join(base, "events", "book.json")
     events = _load_events(events_path)
 
-    return {"rooms": rooms, "npcs": npcs, "monsters": monsters, "items": items, "quests": quests, "skills": skills, "status_effects":status_effects, "tags": tags}, events
+    _validate_role_references(roles, npcs, quests)
+
+    return {
+        "rooms": rooms,
+        "npcs": npcs,
+        "monsters": monsters,
+        "items": items,
+        "quests": quests,
+        "skills": skills,
+        "status_effects": status_effects,
+        "tags": tags,
+        "roles": roles,
+    }, events

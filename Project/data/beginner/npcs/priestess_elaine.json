@@ -23,5 +23,6 @@
       "reward_item": "holy_water",
       "consume": false
     }
-  }
+  },
+  "roles": ["priest", "religious", "civilian"]
 }

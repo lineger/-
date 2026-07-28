@@ -69,5 +69,14 @@
       "slot": "offhand",
       "bonuses": {"def_": 2, "speed": -1},
       "tags": ["shield","heavy_armor"]
+    },
+    "fish": {
+      "name": "魚",
+      "desc": "剛捕獲的鮮魚，可以食用，也可能適合作為禮物。",
+      "simple_use": { "reply": "你烤熟魚肉後吃了下去。", "hp_delta": 2, "consume": true }
+    },
+    "permit": {
+      "name": "通行證",
+      "desc": "由旅店主人交付的通行證，似乎能在某些關卡派上用場。"
     }
 }

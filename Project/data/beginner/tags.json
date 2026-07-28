@@ -46,6 +46,14 @@
     },
     "rock": {
       "name": "岩石"
+    },
+    "human": {
+      "name": "人類",
+      "description": "具有人類生理特徵的戰鬥單位。"
+    },
+    "shield": {
+      "name": "盾牌",
+      "description": "可用於格擋與防護的裝備特徵。"
     }
   }
 }

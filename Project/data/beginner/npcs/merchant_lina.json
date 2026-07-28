@@ -34,5 +34,6 @@
       "reward_item": "apple",
       "consume": true
     }
-  }
+  },
+  "roles": ["merchant", "civilian"]
 }

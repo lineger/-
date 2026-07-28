@@ -107,7 +107,7 @@ class ActionMenu:
         self.state  = state
 
         self.pending_verb   = None
-        self.pending_target = None  # for give: 先選 NPC，再選 item
+        self.pending_target = None  # for gift: 先選 NPC，再選 item
         self.pending_item_id = None # 【新增】用於儲存選擇的 skill_id
 
         # UI 容器
@@ -127,11 +127,12 @@ class ActionMenu:
         if self.engine.combat.in_battle(self.state):          
             ACTIONS = [("攻擊","attack"),("施法","cast"),("防禦","defend"),("逃跑","flee"),("Status","status")]
         else:
-            ACTIONS = [("前往","go"),("對話","talk_open"),("使用","use"),("給予","give"),("查看","look"),
+            ACTIONS = [("前往","go"),("互動","talk_open"),("使用","use"),("查看","look"),
                    ("背包 ","inv"),("突擊","ambush"),("裝備","equip"),("任務","quest_log"),("結束","quit")]
         tooltips = {
             "cast": "施放技能：打開右側技能清單，滑到技能可看說明。",
             "quest_log": "查看當前已接受和已完成的任務清單。",
+            "talk_open": "選擇目前房間中的 NPC，再進行對話、任務交付、送禮或其他人物互動。",
         }
 
         for label, verb in ACTIONS:
@@ -263,7 +264,7 @@ class ActionMenu:
 
         # 沒選動作 -> 顯示提示
         if not v:
-            self._add_option("請先選一個動作（Talk/Give/Use/Go/...）", lambda: None)
+            self._add_option("請先選一個動作（互動／使用／前往……）", lambda: None)
             return
 
         room = self.world["rooms"][self.state.room_id]
@@ -283,100 +284,26 @@ class ActionMenu:
             self._add_option("離開遊戲", lambda: self.root.quit())
             return
 
-        # ---- Talk：列出當前房間可交談的 NPC ----
+        # ---- NPC 互動：對話、交付、送禮與隊伍操作共用同一入口 ----
         if v == "talk_open":
             had_any = False
-            for nid in room.get("npcs", []):
-                npc = self.world["npcs"].get(nid)
+            for npc_id in room.get("npcs", []):
+                npc = self.world.get("npcs", {}).get(npc_id)
                 if not npc:
                     continue
-                if self.engine.can_fire("talk_open", self.state, target_id=nid):
-                    had_any = True
-
-                    def _open_and_list_topics(nid=nid):
-                        # 1) 取 payload
-                        payload = self.engine.fire("talk_open", self.state, target_id=nid)
-
-                        # 2) 清空清單，先畫 NPC 面板
-                        self._clear_list()
-                        if isinstance(payload, dict):
-                            name    = payload.get("name", nid)
-                            level   = payload.get("level", 1)
-                            faction = payload.get("faction", "-")
-                            job     = payload.get("job", "-")
-                            labels  = payload.get("attitudes", [])
-                            primary = payload.get("primary_attitude", "-")
-
-                            # 面板容器
-                            panel = tk.Frame(self.list, bd=1, relief="groove")
-                            panel.pack(fill="x", padx=6, pady=(4, 8))
-
-                            # 標題：名字＋等級
-                            tk.Label(panel, text=f"{name}（Lv.{level}）", anchor="w",
-                                     font=("Microsoft JhengHei UI", 12, "bold")).pack(fill="x", padx=6, pady=(4,2))
-                            # 基本資料行
-                            tk.Label(panel, text=f"陣營：{faction}    職業：{job}", anchor="w").pack(fill="x", padx=6, pady=1)
-                            # 態度行（主標籤＋前三個）
-                            labline = "、".join(labels) if labels else "-"
-                            tk.Label(panel, text=f"態度：{primary}（{labline}）", anchor="w").pack(fill="x", padx=6, pady=(0,6))
-
-                            # 分隔標題：可聊話題
-                            tk.Label(self.list, text="— 可聊話題 —", anchor="w").pack(fill="x", padx=6, pady=(0,4))
-
-                        
-
-                        # 3) 列出話題按鈕
-                        opts = (payload or {}).get("options", []) if isinstance(payload, dict) else []
-                        if not opts:
-                            self._add_option("（目前沒有可聊的話題）", lambda: None)
-                            self._add_option("← 返回 NPC 清單", lambda: self._choose_action("talk_open"))
-                            return
-
-                        for opt in opts:
-                            topic_id = opt["id"]
-                            label    = opt.get("text", topic_id)
-                            self._add_option(
-                                f"＞ {label}",
-                                lambda t=topic_id, nid2=nid: self._run_and_refresh(
-                                    self.engine.fire, "talk_say", self.state, topic_id=t, target_id=nid2
-                                )
-                            )
-
-                        # 在 NPC 面板下方加「招募/請回」按鈕（依 can_fire 顯示）
-
-                        def _do_recruit(nid=nid):
-                            res = self.engine.fire("recruit", self.state, target_id=nid)
-                            msg = (res or {}).get("text")
-                            if msg: self.io.say(msg)
-                            self._populate_context()  # 右欄重算
-                            if hasattr(self.io, "refresh_all"): self.io.refresh_all()
-
-                        def _do_dismiss(nid=nid):
-                            res = self.engine.fire("dismiss", self.state, target_id=nid)
-                            msg = (res or {}).get("text")
-                            if msg: self.io.say(msg)
-                            self._populate_context()
-                            if hasattr(self.io, "refresh_all"): self.io.refresh_all()
-
-                        if self.engine.can_fire("recruit", self.state, target_id=nid):
-                            self._add_option("＞ 招募成隊友",lambda nid=nid: self._run_and_refresh(self.engine.fire, "recruit", self.state, target_id=nid))
-                        if self.engine.can_fire("dismiss", self.state, target_id=nid):
-                            self._add_option("＞ 請滾出去",lambda nid=nid: self._run_and_refresh(self.engine.fire, "dismiss", self.state, target_id=nid))
-
-
-                        # 4) 返回 NPC 清單
-                        self._add_option("← 返回 NPC 清單", lambda: self._choose_action("talk_open"))
-
-                    # NPC 清單按鈕
-                    self._add_option(f"和 {npc['name']} 說話", _open_and_list_topics)
+                had_any = True
+                self._add_option(
+                    f"與 {npc.get('name', npc_id)} 互動",
+                    lambda nid=npc_id: self._open_npc_interaction(nid),
+                )
 
             if not had_any:
-                self._add_option("這裡沒有可以說話的人。", lambda: None)
+                self._add_option("這裡沒有可以互動的人。", lambda: None)
             return
         
         # ---- Use：列出背包中目前可使用的物品 ----
         if v == "use":
-            for item_id in self.state.inventory:
+            for item_id in getattr(self.state.inventory, "items", []):
                 if self.engine.can_fire("use", self.state, item_id=item_id):
                     it = self.world["items"].get(item_id, {"name": item_id})
                     self._add_option(f"使用 {it['name']}", lambda iid=item_id: self.engine.fire("use", self.state, item_id=iid))
@@ -404,8 +331,40 @@ class ActionMenu:
                 self._add_option("沒有可去的方向。", lambda: None)
             return
 
-        # ---- Give：兩段式（先選 NPC，再選背包裡可交付的物品） ----
-        if v == "give":
+        # ---- Deliver：只列出符合進行中任務與收件 role/NPC 的交付選項 ----
+        if v == "deliver":
+            had_any = False
+            for npc_id in room.get("npcs", []):
+                npc = self.world.get("npcs", {}).get(npc_id)
+                if not npc:
+                    continue
+
+                for delivery in self.engine.quest.list_deliveries(self.state, npc_id):
+                    had_any = True
+                    item_id = delivery["item_id"]
+                    quest_id = delivery["quest_id"]
+                    item_name = delivery["item_name"]
+                    quest_name = delivery["quest_name"]
+                    remaining = delivery["remaining"]
+                    self._add_option(
+                        f"交付 {item_name} → {npc.get('name', npc_id)} "
+                        f"（{quest_name}，尚需 {remaining}）",
+                        lambda iid=item_id, nid=npc_id, qid=quest_id: self._run_and_refresh(
+                            self.engine.fire,
+                            "deliver",
+                            self.state,
+                            item_id=iid,
+                            target_id=nid,
+                            quest_id=qid,
+                        ),
+                    )
+
+            if not had_any:
+                self._add_option("目前沒有可交付給此地 NPC 的任務物品。", lambda: None)
+            return
+
+        # ---- Gift：兩段式（先選 NPC，再選背包裡對方接受的禮物） ----
+        if v == "gift":
             # 尚未選 NPC -> 列 NPC
             if self.pending_target is None:
                 for nid in room.get("npcs", []):
@@ -414,8 +373,8 @@ class ActionMenu:
                         continue
                     # 檢查是否「存在某些禮物規則」即可（不在這一步看背包）
                     if npc.get("gifts"):
-                        self._add_option(f"給予→ {npc['name']}", 
-                                         lambda nid=nid: self._on_choose_give_target(nid))
+                        self._add_option(f"送禮給 {npc['name']}", 
+                                         lambda nid=nid: self._on_choose_gift_target(nid))
                 if not any(True for _ in self.list.winfo_children()):
                     self._add_option("這裡沒有適合給東西的人。", lambda: None)
                 return
@@ -425,16 +384,22 @@ class ActionMenu:
                 gifts = npc.get("gifts", {})
                 # 過濾玩家擁有 & NPC 接受
                 had_any = False
-                for item_id in self.state.inventory:
-                    if item_id in gifts and self.engine.can_fire("give", self.state, item_id=item_id, target_id=self.pending_target):
+                for item_id in getattr(self.state.inventory, "items", []):
+                    if item_id in gifts and self.engine.can_fire("gift", self.state, item_id=item_id, target_id=self.pending_target):
                         it = self.world["items"].get(item_id, {"name": item_id})
-                        self._add_option(f"交給 {npc.get('name', self.pending_target)}：{it['name']}",
-                                         lambda iid=item_id: self.engine.fire("give", self.state, item_id=iid, target_id=self.pending_target))
+                        self._add_option(f"送給 {npc.get('name', self.pending_target)}：{it['name']}",
+                                         lambda iid=item_id: self._run_and_refresh(
+                                             self.engine.fire,
+                                             "gift",
+                                             self.state,
+                                             item_id=iid,
+                                             target_id=self.pending_target,
+                                         ))
                         had_any = True
                 if not had_any:
                     self._add_option("你身上沒有對方想要的東西。", lambda: None)
                 # 也放一個返回鍵
-                self._add_option("← 返回選 NPC", lambda: self._choose_action("give"))
+                self._add_option("← 返回 NPC 互動", lambda nid=self.pending_target: self._open_npc_interaction(nid))
                 return
 
         # ---裝備---
@@ -559,41 +524,144 @@ class ActionMenu:
         # 捕捉所有其他未處理的 verb
         self._add_option(f"[未支援] {v}", lambda: None)
 
-    def _on_choose_give_target(self, nid):
+    def _gift_items_for_npc(self, npc_id: str) -> list[tuple[str, dict]]:
+        """列出玩家目前真的能送給指定 NPC 的物品；只供 UI 顯示。"""
+        npc = self.world.get("npcs", {}).get(npc_id, {})
+        gifts = npc.get("gifts") or {}
+        out: list[tuple[str, dict]] = []
+        for item_id in getattr(self.state.inventory, "items", []):
+            if item_id not in gifts:
+                continue
+            if not self.engine.can_fire(
+                "gift",
+                self.state,
+                item_id=item_id,
+                target_id=npc_id,
+            ):
+                continue
+            out.append((item_id, self.world.get("items", {}).get(item_id, {"name": item_id})))
+        return out
+
+    def _open_npc_interaction(self, npc_id: str) -> None:
+        """顯示單一 NPC 的對話、交付、送禮與隊伍互動。"""
+        payload = self.engine.fire("talk_open", self.state, target_id=npc_id)
+        if not isinstance(payload, dict) or not payload.get("ok"):
+            message = payload.get("text", "對方現在無法互動。") if isinstance(payload, dict) else "對方現在無法互動。"
+            self.io.say(message)
+            return
+
+        self.pending_verb = "talk_open"
+        self.pending_target = npc_id
+        self.pending_item_id = None
+        self._clear_list()
+
+        name = payload.get("name", npc_id)
+        level = payload.get("level", 1)
+        faction = payload.get("faction", "-")
+        job = payload.get("job", "-")
+        labels = payload.get("attitudes", [])
+        primary = payload.get("primary_attitude", "-")
+
+        panel = tk.Frame(self.list, bd=1, relief="groove")
+        panel.pack(fill="x", padx=6, pady=(4, 8))
+        tk.Label(
+            panel,
+            text=f"{name}（Lv.{level}）",
+            anchor="w",
+            font=("Microsoft JhengHei UI", 12, "bold"),
+        ).pack(fill="x", padx=6, pady=(4, 2))
+        tk.Label(panel, text=f"陣營：{faction}    職業：{job}", anchor="w").pack(fill="x", padx=6, pady=1)
+        label_text = "、".join(labels) if labels else "-"
+        tk.Label(panel, text=f"態度：{primary}（{label_text}）", anchor="w").pack(fill="x", padx=6, pady=(0, 6))
+
+        tk.Label(self.list, text="— 對話 —", anchor="w").pack(fill="x", padx=6, pady=(0, 4))
+        options = payload.get("options", [])
+        if options:
+            for option in options:
+                topic_id = option["id"]
+                label = option.get("text", topic_id)
+                self._add_option(
+                    f"＞ {label}",
+                    lambda tid=topic_id, nid=npc_id: self._run_and_refresh(
+                        self.engine.fire,
+                        "talk_say",
+                        self.state,
+                        topic_id=tid,
+                        target_id=nid,
+                    ),
+                )
+        else:
+            self._add_option("（目前沒有可聊的話題）", lambda: None, disabled=True)
+
+        deliveries = self.engine.quest.list_deliveries(self.state, npc_id)
+        gift_items = self._gift_items_for_npc(npc_id)
+        can_recruit = self.engine.can_fire("recruit", self.state, target_id=npc_id)
+        can_dismiss = self.engine.can_fire("dismiss", self.state, target_id=npc_id)
+
+        if deliveries or gift_items or can_recruit or can_dismiss:
+            tk.Label(self.list, text="— 其他互動 —", anchor="w").pack(fill="x", padx=6, pady=(6, 4))
+
+        for delivery in deliveries:
+            item_id = delivery["item_id"]
+            quest_id = delivery["quest_id"]
+            item_name = delivery["item_name"]
+            quest_name = delivery["quest_name"]
+            remaining = delivery["remaining"]
+            self._add_option(
+                f"📦 交付 {item_name}（{quest_name}，尚需 {remaining}）",
+                lambda iid=item_id, qid=quest_id, nid=npc_id: self._run_and_refresh(
+                    self.engine.fire,
+                    "deliver",
+                    self.state,
+                    item_id=iid,
+                    target_id=nid,
+                    quest_id=qid,
+                ),
+            )
+
+        if gift_items:
+            self._add_option("🎁 送禮…", lambda nid=npc_id: self._on_talk_gift_entry(nid))
+
+        if can_recruit:
+            self._add_option(
+                "＞ 招募成隊友",
+                lambda nid=npc_id: self._run_and_refresh(
+                    self.engine.fire,
+                    "recruit",
+                    self.state,
+                    target_id=nid,
+                ),
+            )
+        if can_dismiss:
+            self._add_option(
+                "＞ 請離隊伍",
+                lambda nid=npc_id: self._run_and_refresh(
+                    self.engine.fire,
+                    "dismiss",
+                    self.state,
+                    target_id=nid,
+                ),
+            )
+
+        self._add_option("← 返回 NPC 清單", lambda: self._choose_action("talk_open"))
+
+    def _on_choose_gift_target(self, nid):
         self.pending_target = nid
         self._populate_context()
 
     def _on_talk_open(self, npc_id: str):
-        payload = self.engine.fire("talk_open", self.state, target_id=npc_id)
-        # 失敗就顯示訊息並結束
-        if not isinstance(payload, dict) or not payload.get("ok"):
-            msg = (payload or {}).get("text") if isinstance(payload, dict) else "她似乎不想談。"
-            self.io.say(msg)
-            return
+        """相容舊呼叫；統一轉入 NPC 互動畫面。"""
+        self._open_npc_interaction(npc_id)
 
-        # 清掉右側子選單（名稱依你的 UI，沒有就略過）
-        if hasattr(self, "_clear_submenu"):
-            self._clear_submenu()
 
-        # 用 options 建立話題按鈕
-        options = payload.get("options", [])
-        if not options:
-            self._add_option("（目前沒有可聊的話題）", lambda: None)
-            return
-
-        for opt in options:
-            topic_id = opt["id"]
-            label    = opt.get("text", topic_id)
-            # 這裡用默認 add_option 或你的子選單方法
-            add = getattr(self, "_add_sub_option", self._add_option)
-            add(f"＞ {label}", lambda t=topic_id, nid=npc_id: self._on_talk_say(nid, t))
-
-        # 如果可送禮，也給一個入口（可先留著）
-        if payload.get("giftable"):
-            add = getattr(self, "_add_sub_option", self._add_option)
-            add("🎁 送禮…", lambda nid=npc_id: self._on_talk_give_entry(nid))
+    def _on_talk_gift_entry(self, npc_id: str):
+        """從對話子選單直接進入同一套 gift 流程。"""
+        self.pending_verb = "gift"
+        self.pending_target = npc_id
+        self.pending_item_id = None
+        self._populate_context()
 
     def _on_talk_say(self, npc_id: str, topic_id: str):
         res = self.engine.fire("talk_say", self.state, target_id=npc_id, topic_id=topic_id)
         # Engine.fire 已會把 res["text"] 自動 say；這裡只要重刷一次話題即可
-        self._on_talk_open(npc_id)
+        self._open_npc_interaction(npc_id)

@@ -241,8 +241,9 @@ class Engine:
             ev_ids = self.world["items"].get(request.item_id, {}).get("events", {}).get("use", [])
         elif request.verb == "talk" and request.target_id:
             ev_ids = self.world["npcs"].get(request.target_id, {}).get("events", {}).get("talk", [])
-        elif request.verb == "give" and request.item_id:
-            ev_ids = self.world["items"].get(request.item_id, {}).get("events", {}).get("give", [])
+        elif request.verb == "gift" and request.item_id:
+            item_events = self.world["items"].get(request.item_id, {}).get("events", {})
+            ev_ids = item_events.get("gift", item_events.get("give", []))
         elif request.verb == "enter":
             room_id = state.room_id
             ev_ids = self.world["rooms"].get(room_id, {}).get("events", {}).get("enter", [])
