@@ -38,7 +38,8 @@ class EquipEngine:
             if item_id not in state.inventory.items:
                 return False
             slot = item.get("slot")
-            if not slot or slot not in state.inventory.equipment:
+            known_slots = self.world.get("equipment_slots", {}) or state.inventory.equipment
+            if not slot or slot not in known_slots:
                 return False
             return not state.combat.active
 
@@ -62,6 +63,7 @@ class EquipEngine:
             item_id = request.item_id
             item = self.world["items"][item_id]
             slot = item["slot"]
+            state.inventory.equipment.setdefault(slot, None)
             previous = state.inventory.equipment.get(slot)
             state.inventory.equipment[slot] = item_id
             if previous and previous not in state.inventory.items:

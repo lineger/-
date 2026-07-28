@@ -4,9 +4,18 @@ from copy import deepcopy
 import json
 from pathlib import Path
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog, ttk
-from typing import Any, Callable
+from tkinter import filedialog, messagebox, ttk
+from typing import Any
 
+from property_editor import PROPERTY_CATALOGS, SearchablePropertyEditor
+from kind_contracts import (
+    ITEM_ACTION_CATALOG,
+    ITEM_FIELD_CATALOG,
+    kind_actions,
+    kind_allowed_slots,
+    kind_contract_summary,
+    kind_required_fields,
+)
 from repository import CATEGORY_SPECS, ProjectDataRepository
 from validators import DataValidationError, ValidationIssue
 
@@ -14,6 +23,8 @@ from validators import DataValidationError, ValidationIssue
 CATEGORY_LABELS = {
     "tags": "戰鬥 Tags",
     "roles": "社交 Roles",
+    "item_kinds": "物品種類 Kinds",
+    "equipment_slots": "裝備欄位 Slots",
     "items": "Items",
     "rooms": "Rooms",
     "npcs": "NPCs",
@@ -25,6 +36,14 @@ LABEL_TO_CATEGORY = {label: key for key, label in CATEGORY_LABELS.items()}
 CATEGORY_FILTERS = {
     "tags": (("全部", ""), ("倍率目標", "multiplier_target")),
     "roles": (("全部", ""),),
+    "item_kinds": (
+        ("全部", ""),
+        ("允許操作", "allowed_actions"),
+        ("必填欄位", "required_fields"),
+        ("可堆疊", "stackable"),
+        ("允許裝備欄", "allowed_slots"),
+    ),
+    "equipment_slots": (("全部", ""),),
     "items": (("全部", ""), ("戰鬥 Tag", "tags"), ("種類 kind", "kind"), ("裝備欄 slot", "slot")),
     "rooms": (("全部", ""), ("環境標籤", "tags"), ("固定 NPC", "npcs")),
     "npcs": (("全部", ""), ("戰鬥 Tag", "tags"), ("社交 Role", "roles"), ("預設房間", "home_room")),
@@ -41,7 +60,15 @@ CATEGORY_FILTERS = {
 KNOWN_FIELDS = {
     "tags": {"id", "name", "description", "multipliers", "on_hit_proc"},
     "roles": {"id", "name", "description"},
-    "items": {"id", "name", "desc", "description", "kind", "slot", "tags", "bonuses", "simple_use", "uses"},
+    "item_kinds": {
+        "id", "name", "description", "allowed_actions", "required_fields",
+        "stackable", "default_max_stack", "allowed_slots",
+    },
+    "equipment_slots": {"id", "name", "description", "order"},
+    "items": {
+        "id", "name", "desc", "description", "kind", "slot", "tags",
+        "bonuses", "simple_use", "uses", "max_stack",
+    },
     "rooms": {"id", "name", "desc", "description", "exits", "npcs", "items", "tags", "encounters"},
     "npcs": {
         "id", "name", "description", "aliases", "recruitable", "home_room", "default_room",
@@ -273,6 +300,8 @@ class DataEditorApp(tk.Tk):
                 if isinstance(task, dict) and task.get(task_key) not in (None, "")
             }
         value = entity.get(key)
+        if key == "stackable":
+            return {"是" if bool(value) else "否"}
         if key == "home_room":
             value = entity.get("home_room") or entity.get("default_room")
         if isinstance(value, list):
@@ -312,6 +341,7 @@ class DataEditorApp(tk.Tk):
 
     def _reload_all(self) -> None:
         self.data = self.repo.load_all()
+        self._refresh_entity_filters(reset=False)
         self._load_entity_list(select_id=self.current_id)
         self._set_status("已從磁碟重新載入全部資料。")
 
@@ -326,6 +356,7 @@ class DataEditorApp(tk.Tk):
             messagebox.showerror("無法載入", str(exc), parent=self)
             return
         self.current_id = None
+        self._refresh_entity_filters(reset=True)
         self._load_entity_list()
         self._clear_form("已切換資料目錄，請選擇項目。")
         self._set_status(f"資料目錄：{self.repo.data_dir}")
@@ -347,22 +378,127 @@ class DataEditorApp(tk.Tk):
         row = self._add_entry(row, "id", "ID", entity.get("id", ""), readonly=not id_editable)
 
         category = self.current_category
-        if category in {"tags", "roles"}:
+        if category in {"tags", "roles", "item_kinds", "equipment_slots"}:
             row = self._add_entry(row, "name", "顯示名稱", entity.get("name", ""))
             row = self._add_text(row, "description", "說明", entity.get("description", ""), height=3)
             if category == "tags":
                 row = self._add_json(row, "multipliers", "傷害倍率", entity.get("multipliers", {}), expected=dict, height=5)
                 row = self._add_json(row, "on_hit_proc", "命中效果", entity.get("on_hit_proc", {}), expected=dict, height=5)
+            elif category == "item_kinds":
+                action_choices = {
+                    action_id: {
+                        "name": spec["label"],
+                        "description": spec["description"],
+                    }
+                    for action_id, spec in ITEM_ACTION_CATALOG.items()
+                }
+                field_choices = {
+                    field_id: {
+                        "name": spec["label"],
+                        "description": spec["description"],
+                    }
+                    for field_id, spec in ITEM_FIELD_CATALOG.items()
+                }
+                row = self._add_multiselect(
+                    row,
+                    "allowed_actions",
+                    "允許操作",
+                    action_choices,
+                    entity.get("allowed_actions", []),
+                    height=6,
+                )
+                row = self._add_multiselect(
+                    row,
+                    "required_fields",
+                    "必填 Item 欄位",
+                    field_choices,
+                    entity.get("required_fields", []),
+                    height=6,
+                )
+                row = self._add_bool(row, "stackable", "可堆疊", bool(entity.get("stackable", False)))
+                row = self._add_entry(
+                    row,
+                    "default_max_stack",
+                    "預設堆疊上限",
+                    entity.get("default_max_stack", ""),
+                )
+                row = self._add_multiselect(
+                    row,
+                    "allowed_slots",
+                    "允許裝備欄",
+                    self.data["equipment_slots"],
+                    entity.get("allowed_slots", []),
+                    height=5,
+                )
+            elif category == "equipment_slots":
+                row = self._add_entry(row, "order", "顯示順序", entity.get("order", ""))
 
         elif category == "items":
             row = self._add_entry(row, "name", "名稱", entity.get("name", ""))
             row = self._add_text(row, "desc", "描述", entity.get("desc", entity.get("description", "")), height=3)
-            row = self._add_entry(row, "kind", "種類 kind", entity.get("kind", ""))
-            row = self._add_entry(row, "slot", "裝備欄 slot", entity.get("slot", ""))
+            row = self._add_reference_combo(
+                row,
+                "kind",
+                "種類 kind",
+                "item_kinds",
+                entity.get("kind", ""),
+                allow_empty=True,
+            )
+            self.widgets["kind"].bind("<<ComboboxSelected>>", self._on_item_kind_changed)
+
+            kind_id = str(entity.get("kind", "") or "")
+            kind_meta = self.data.get("item_kinds", {}).get(kind_id, {})
+            actions = kind_actions(kind_meta)
+            required_fields = kind_required_fields(kind_meta)
+            allowed_slots = kind_allowed_slots(kind_meta)
+            row = self._add_kind_summary(row, kind_id, kind_meta, entity)
+
+            show_equip = "equip" in actions or bool(entity.get("slot")) or bool(entity.get("bonuses"))
+            show_use = "use" in actions or bool(entity.get("simple_use"))
+            show_target_use = "target_use" in actions or bool(entity.get("uses"))
+            show_stack = bool(kind_meta.get("stackable", False)) or "max_stack" in entity
+
+            if show_equip:
+                slot_label = "裝備欄 slot" + (" *" if "slot" in required_fields else "")
+                row = self._add_reference_combo(
+                    row,
+                    "slot",
+                    slot_label,
+                    "equipment_slots",
+                    entity.get("slot", ""),
+                    allow_empty=True,
+                    choice_ids=allowed_slots or None,
+                )
+                bonus_label = "裝備加成" + (" *" if "bonuses" in required_fields else "")
+                row = self._add_property_editor(
+                    row,
+                    "bonuses",
+                    bonus_label,
+                    entity.get("bonuses", {}),
+                    catalog="bonuses",
+                    height=6,
+                )
+
             row = self._add_multiselect(row, "tags", "戰鬥 Tags", self.data["tags"], entity.get("tags", []), height=6)
-            row = self._add_json(row, "bonuses", "裝備加成", entity.get("bonuses", {}), expected=dict, height=5)
-            row = self._add_json(row, "simple_use", "直接使用規則", entity.get("simple_use", {}), expected=dict, height=6)
-            row = self._add_json(row, "uses", "指定目標使用規則", entity.get("uses", {}), expected=dict, height=6)
+
+            if show_stack:
+                stack_label = "物品堆疊上限 max_stack" + (" *" if "max_stack" in required_fields else "")
+                row = self._add_entry(row, "max_stack", stack_label, entity.get("max_stack", ""))
+
+            if show_use:
+                use_label = "直接使用規則" + (" *" if "simple_use" in required_fields else "")
+                row = self._add_property_editor(
+                    row,
+                    "simple_use",
+                    use_label,
+                    entity.get("simple_use", {}),
+                    catalog="simple_use",
+                    height=7,
+                )
+
+            if show_target_use:
+                uses_label = "指定目標使用規則" + (" *" if "uses" in required_fields else "")
+                row = self._add_json(row, "uses", uses_label, entity.get("uses", {}), expected=dict, height=6)
 
         elif category == "rooms":
             row = self._add_entry(row, "name", "名稱", entity.get("name", ""))
@@ -386,10 +522,10 @@ class DataEditorApp(tk.Tk):
             row = self._add_entry(row, "faction", "陣營", entity.get("faction", "-"))
             row = self._add_entry(row, "job", "職稱", entity.get("job", "-"))
             row = self._add_entry(row, "level", "等級", entity.get("level", entity.get("lvl", 1)))
-            row = self._add_json(row, "attr", "六圍 attr", entity.get("attr", {}), expected=dict, height=7)
-            row = self._add_json(row, "stats", "永久數值 stats", entity.get("stats", {}), expected=dict, height=7)
+            row = self._add_property_editor(row, "attr", "六圍 attr", entity.get("attr", {}), catalog="attr", height=7)
+            row = self._add_property_editor(row, "stats", "永久數值 stats", entity.get("stats", {}), catalog="stats", height=7)
             row = self._add_json(row, "equipment", "裝備", entity.get("equipment", {}), expected=dict, height=6)
-            row = self._add_json(row, "combat", "戰鬥資料", entity.get("combat", {}), expected=dict, height=6)
+            row = self._add_property_editor(row, "combat", "戰鬥資料", entity.get("combat", {}), catalog="combat", height=7)
             row = self._add_json(row, "skills", "技能 ID 陣列", entity.get("skills", []), expected=list, height=5)
             row = self._add_json(row, "topics", "對話 Topics", entity.get("topics", {}), expected=dict, height=10)
             row = self._add_json(row, "gifts", "送禮規則", entity.get("gifts", {}), expected=dict, height=9)
@@ -406,6 +542,47 @@ class DataEditorApp(tk.Tk):
 
         extra = {key: value for key, value in entity.items() if key not in KNOWN_FIELDS[category]}
         self._add_json(row, "__extra__", "其他／尚未表單化欄位", extra, expected=dict, height=7)
+
+    def _add_kind_summary(
+        self,
+        row: int,
+        kind_id: str,
+        kind_meta: dict[str, Any],
+        entity: dict[str, Any],
+    ) -> int:
+        ttk.Label(self.form_inner, text="Kind 規則").grid(row=row, column=0, sticky="nw", padx=4, pady=4)
+        summary = kind_contract_summary(kind_id, kind_meta)
+        actions = kind_actions(kind_meta)
+        conflicts: list[str] = []
+        if entity.get("slot") and "equip" not in actions:
+            conflicts.append("目前已有 slot，但此 Kind 未允許『裝備』")
+        if entity.get("bonuses") and "equip" not in actions:
+            conflicts.append("目前已有 bonuses，但此 Kind 未允許『裝備』")
+        if entity.get("simple_use") and "use" not in actions:
+            conflicts.append("目前已有 simple_use，但此 Kind 未允許『直接使用』")
+        if entity.get("uses") and "target_use" not in actions:
+            conflicts.append("目前已有 uses，但此 Kind 未允許『指定目標使用』")
+        if entity.get("max_stack") is not None and not bool(kind_meta.get("stackable", False)):
+            conflicts.append("目前已有 max_stack，但此 Kind 設為不可堆疊")
+        if conflicts:
+            summary += "\n⚠ " + "；".join(conflicts)
+        label = ttk.Label(self.form_inner, text=summary, justify="left", wraplength=760)
+        label.grid(row=row, column=1, sticky="ew", padx=4, pady=4)
+        self.widgets["__kind_summary__"] = label
+        return row + 1
+
+    def _on_item_kind_changed(self, _event=None) -> None:
+        if self.current_category != "items" or "kind" not in self.vars:
+            return
+        try:
+            entity = self._collect_entity()
+        except Exception as exc:
+            messagebox.showerror("無法切換 Kind", str(exc), parent=self)
+            return
+        entity["kind"] = self.vars["kind"].get().strip()
+        self.current_entity = deepcopy(entity)
+        self._build_form(entity, id_editable=self.is_new)
+        self._update_preview()
 
     def _add_entry(self, row: int, key: str, label: str, value: Any, *, readonly: bool = False) -> int:
         ttk.Label(self.form_inner, text=label).grid(row=row, column=0, sticky="nw", padx=4, pady=4)
@@ -458,6 +635,63 @@ class DataEditorApp(tk.Tk):
         combo.grid(row=row, column=1, sticky="ew", padx=4, pady=4)
         self.vars[key] = var
         self.widgets[key] = combo
+        return row + 1
+
+    def _add_reference_combo(
+        self,
+        row: int,
+        key: str,
+        label: str,
+        category: str,
+        value: str,
+        *,
+        allow_empty: bool,
+        choice_ids: list[str] | None = None,
+    ) -> int:
+        ttk.Label(self.form_inner, text=label).grid(row=row, column=0, sticky="nw", padx=4, pady=4)
+        frame = ttk.Frame(self.form_inner)
+        frame.grid(row=row, column=1, sticky="ew", padx=4, pady=4)
+        frame.columnconfigure(0, weight=1)
+
+        available_ids = sorted(choice_ids if choice_ids is not None else self.data.get(category, {}))
+        if value and value not in available_ids:
+            available_ids.append(value)
+            available_ids.sort()
+        values = ([""] if allow_empty else []) + available_ids
+        var = tk.StringVar(value=value or "")
+        combo = ttk.Combobox(frame, textvariable=var, values=values, state="readonly")
+        combo.grid(row=0, column=0, sticky="ew")
+        ttk.Button(
+            frame,
+            text="＋ 新增",
+            command=lambda: self._quick_add_reference(category, key, combo),
+        ).grid(row=0, column=1, padx=(6, 0))
+
+        self.vars[key] = var
+        self.widgets[key] = combo
+        combo.reference_category = category
+        combo.allow_empty = allow_empty
+        return row + 1
+
+    def _add_property_editor(
+        self,
+        row: int,
+        key: str,
+        label: str,
+        value: dict[str, Any],
+        *,
+        catalog: str,
+        height: int,
+    ) -> int:
+        ttk.Label(self.form_inner, text=label).grid(row=row, column=0, sticky="nw", padx=4, pady=4)
+        editor = SearchablePropertyEditor(
+            self.form_inner,
+            value=value,
+            catalog=PROPERTY_CATALOGS[catalog],
+            height=height,
+        )
+        editor.grid(row=row, column=1, sticky="nsew", padx=4, pady=4)
+        self.widgets[key] = editor
         return row + 1
 
     def _add_multiselect(
@@ -540,23 +774,61 @@ class DataEditorApp(tk.Tk):
         entity = deepcopy(self.current_entity) if not self.is_new else {}
         entity["id"] = self._string_var("id", required=True)
 
-        if category in {"tags", "roles"}:
+        if category in {"tags", "roles", "item_kinds", "equipment_slots"}:
             self._set_optional(entity, "name", self._string_var("name"))
             self._set_optional(entity, "description", self._text("description"))
             if category == "tags":
                 self._set_optional(entity, "multipliers", self._json("multipliers", dict))
                 self._set_optional(entity, "on_hit_proc", self._json("on_hit_proc", dict))
+            elif category == "item_kinds":
+                self._set_optional(entity, "allowed_actions", self._multiselect("allowed_actions"))
+                self._set_optional(entity, "required_fields", self._multiselect("required_fields"))
+                if bool(self.vars["stackable"].get()):
+                    entity["stackable"] = True
+                else:
+                    entity.pop("stackable", None)
+                max_stack_text = self._string_var("default_max_stack")
+                if max_stack_text:
+                    try:
+                        entity["default_max_stack"] = int(max_stack_text)
+                    except ValueError as exc:
+                        raise ValueError("預設堆疊上限必須是整數") from exc
+                else:
+                    entity.pop("default_max_stack", None)
+                self._set_optional(entity, "allowed_slots", self._multiselect("allowed_slots"))
+            elif category == "equipment_slots":
+                order_text = self._string_var("order")
+                if order_text:
+                    try:
+                        entity["order"] = int(order_text)
+                    except ValueError as exc:
+                        raise ValueError("顯示順序必須是整數") from exc
+                else:
+                    entity.pop("order", None)
 
         elif category == "items":
             self._set_optional(entity, "name", self._string_var("name"))
             self._set_optional(entity, "desc", self._text("desc"))
             entity.pop("description", None)
             self._set_optional(entity, "kind", self._string_var("kind"))
-            self._set_optional(entity, "slot", self._string_var("slot"))
+            if "slot" in self.vars:
+                self._set_optional(entity, "slot", self._string_var("slot"))
             self._set_optional(entity, "tags", self._multiselect("tags"))
-            self._set_optional(entity, "bonuses", self._json("bonuses", dict))
-            self._set_optional(entity, "simple_use", self._json("simple_use", dict))
-            self._set_optional(entity, "uses", self._json("uses", dict))
+            if "bonuses" in self.widgets:
+                self._set_optional(entity, "bonuses", self._mapping("bonuses"))
+            if "max_stack" in self.vars:
+                max_stack_text = self._string_var("max_stack")
+                if max_stack_text:
+                    try:
+                        entity["max_stack"] = int(max_stack_text)
+                    except ValueError as exc:
+                        raise ValueError("物品堆疊上限必須是整數") from exc
+                else:
+                    entity.pop("max_stack", None)
+            if "simple_use" in self.widgets:
+                self._set_optional(entity, "simple_use", self._mapping("simple_use"))
+            if "uses" in self.widgets:
+                self._set_optional(entity, "uses", self._json("uses", dict))
 
         elif category == "rooms":
             self._set_optional(entity, "name", self._string_var("name"))
@@ -591,10 +863,10 @@ class DataEditorApp(tk.Tk):
                     raise ValueError("等級必須是整數") from exc
             else:
                 entity.pop("level", None)
-            self._set_optional(entity, "attr", self._json("attr", dict))
-            self._set_optional(entity, "stats", self._json("stats", dict))
+            self._set_optional(entity, "attr", self._mapping("attr"))
+            self._set_optional(entity, "stats", self._mapping("stats"))
             self._set_optional(entity, "equipment", self._json("equipment", dict))
-            self._set_optional(entity, "combat", self._json("combat", dict))
+            self._set_optional(entity, "combat", self._mapping("combat"))
             self._set_optional(entity, "skills", self._json("skills", list))
             self._set_optional(entity, "topics", self._json("topics", dict))
             self._set_optional(entity, "gifts", self._json("gifts", dict))
@@ -644,6 +916,12 @@ class DataEditorApp(tk.Tk):
             expected_name = "object" if expected is dict else "array"
             raise ValueError(f"{key} 必須是 JSON {expected_name}")
         return value
+
+    def _mapping(self, key: str) -> dict[str, Any]:
+        widget = self.widgets[key]
+        if not isinstance(widget, SearchablePropertyEditor):
+            raise TypeError(f"{key} 不是屬性編輯器")
+        return widget.get_value()
 
     def _csv(self, key: str) -> list[str]:
         return [part.strip() for part in self._string_var(key).replace("，", ",").split(",") if part.strip()]
@@ -729,6 +1007,7 @@ class DataEditorApp(tk.Tk):
             return
 
         self.data = self.repo.load_all()
+        self._refresh_entity_filters(reset=False)
         self.current_id = entity_id
         self.current_entity = deepcopy(self.data[self.current_category][entity_id])
         self.is_new = False
@@ -754,6 +1033,7 @@ class DataEditorApp(tk.Tk):
         self.data = self.repo.load_all()
         self.current_id = None
         self.current_entity = {}
+        self._refresh_entity_filters(reset=False)
         self._load_entity_list()
         self._clear_form("項目已刪除。")
         self._show_issues(issues)
@@ -789,9 +1069,196 @@ class DataEditorApp(tk.Tk):
             messagebox.showerror("格式化失敗", str(exc), parent=self)
             return
         self.data = self.repo.load_all()
+        self._refresh_entity_filters(reset=False)
         self._load_entity_list(select_id=self.current_id)
         self._show_issues(issues)
         self._set_status(f"已格式化 {len(paths)} 個資料分類；舊檔保存在 .editor_backups。")
+
+    def _quick_add_reference(self, category: str, target_key: str, combo: ttk.Combobox) -> None:
+        dialog = tk.Toplevel(self)
+        dialog.title(f"新增 {CATEGORY_LABELS[category]}")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.columnconfigure(1, weight=1)
+
+        id_var = tk.StringVar(value="")
+        name_var = tk.StringVar(value="")
+        description_var = tk.StringVar(value="")
+        order_var = tk.StringVar(value="")
+        stackable_var = tk.BooleanVar(value=False)
+        default_max_stack_var = tk.StringVar(value="")
+        action_vars = {action_id: tk.BooleanVar(value=False) for action_id in ITEM_ACTION_CATALOG}
+        field_vars = {field_id: tk.BooleanVar(value=False) for field_id in ITEM_FIELD_CATALOG}
+
+        ttk.Label(dialog, text="ID").grid(row=0, column=0, sticky="w", padx=8, pady=5)
+        id_entry = ttk.Entry(dialog, textvariable=id_var)
+        id_entry.grid(row=0, column=1, sticky="ew", padx=8, pady=5)
+        ttk.Label(dialog, text="顯示名稱").grid(row=1, column=0, sticky="w", padx=8, pady=5)
+        ttk.Entry(dialog, textvariable=name_var).grid(row=1, column=1, sticky="ew", padx=8, pady=5)
+        ttk.Label(dialog, text="說明").grid(row=2, column=0, sticky="w", padx=8, pady=5)
+        ttk.Entry(dialog, textvariable=description_var).grid(row=2, column=1, sticky="ew", padx=8, pady=5)
+        next_row = 3
+        slot_listbox: tk.Listbox | None = None
+
+        if category == "equipment_slots":
+            ttk.Label(dialog, text="顯示順序").grid(row=3, column=0, sticky="w", padx=8, pady=5)
+            ttk.Entry(dialog, textvariable=order_var).grid(row=3, column=1, sticky="ew", padx=8, pady=5)
+            next_row = 4
+        elif category == "item_kinds":
+            actions_frame = ttk.Labelframe(dialog, text="允許操作", padding=6)
+            actions_frame.grid(row=3, column=0, columnspan=2, sticky="ew", padx=8, pady=5)
+            for index, (action_id, spec) in enumerate(ITEM_ACTION_CATALOG.items()):
+                ttk.Checkbutton(
+                    actions_frame,
+                    text=f"{action_id} — {spec['label']}",
+                    variable=action_vars[action_id],
+                ).grid(row=index // 3, column=index % 3, sticky="w", padx=5, pady=2)
+
+            fields_frame = ttk.Labelframe(dialog, text="必填 Item 欄位", padding=6)
+            fields_frame.grid(row=4, column=0, columnspan=2, sticky="ew", padx=8, pady=5)
+            for index, (field_id, spec) in enumerate(ITEM_FIELD_CATALOG.items()):
+                ttk.Checkbutton(
+                    fields_frame,
+                    text=f"{field_id} — {spec['label']}",
+                    variable=field_vars[field_id],
+                ).grid(row=index // 2, column=index % 2, sticky="w", padx=5, pady=2)
+
+            stack_frame = ttk.Frame(dialog)
+            stack_frame.grid(row=5, column=0, columnspan=2, sticky="ew", padx=8, pady=5)
+            ttk.Checkbutton(stack_frame, text="可堆疊", variable=stackable_var).pack(side="left")
+            ttk.Label(stack_frame, text="預設上限").pack(side="left", padx=(12, 4))
+            ttk.Entry(stack_frame, textvariable=default_max_stack_var, width=10).pack(side="left")
+
+            slots_frame = ttk.Labelframe(dialog, text="允許裝備欄（可複選）", padding=6)
+            slots_frame.grid(row=6, column=0, columnspan=2, sticky="nsew", padx=8, pady=5)
+            slot_listbox = tk.Listbox(slots_frame, selectmode="multiple", exportselection=False, height=5)
+            slot_scroll = ttk.Scrollbar(slots_frame, orient="vertical", command=slot_listbox.yview)
+            slot_listbox.configure(yscrollcommand=slot_scroll.set)
+            slot_listbox.pack(side="left", fill="both", expand=True)
+            slot_scroll.pack(side="right", fill="y")
+            slot_listbox.slot_ids = sorted(self.data.get("equipment_slots", {}))
+            for slot_id in slot_listbox.slot_ids:
+                slot = self.data["equipment_slots"][slot_id]
+                slot_listbox.insert(tk.END, f"{slot_id} — {slot.get('name', '')}")
+            next_row = 7
+
+        def commit() -> None:
+            allowed_slots: list[str] = []
+            if slot_listbox is not None:
+                allowed_slots = [slot_listbox.slot_ids[index] for index in slot_listbox.curselection()]
+            try:
+                entity_id = self._save_reference_definition(
+                    category,
+                    id_var.get(),
+                    name_var.get(),
+                    description_var.get(),
+                    order=order_var.get(),
+                    allowed_actions=[key for key, var in action_vars.items() if var.get()],
+                    required_fields=[key for key, var in field_vars.items() if var.get()],
+                    stackable=bool(stackable_var.get()),
+                    default_max_stack=default_max_stack_var.get(),
+                    allowed_slots=allowed_slots,
+                )
+                if category == "equipment_slots":
+                    self._extend_current_kind_allowed_slots(entity_id)
+            except DataValidationError as exc:
+                self._show_issues(exc.issues)
+                messagebox.showerror("驗證失敗", str(exc), parent=dialog)
+                return
+            except Exception as exc:
+                messagebox.showerror("無法新增", str(exc), parent=dialog)
+                return
+
+            allow_empty = bool(getattr(combo, "allow_empty", False))
+            combo.configure(values=([""] if allow_empty else []) + sorted(self.data[category]))
+            self.vars[target_key].set(entity_id)
+            dialog.destroy()
+            if self.current_category == "items" and target_key == "kind":
+                self._on_item_kind_changed()
+            elif self.current_category == "items" and target_key == "slot":
+                try:
+                    entity = self._collect_entity()
+                except Exception:
+                    entity = deepcopy(self.current_entity)
+                    entity["slot"] = entity_id
+                entity["slot"] = entity_id
+                self.current_entity = deepcopy(entity)
+                self._build_form(entity, id_editable=self.is_new)
+                self._update_preview()
+            else:
+                self._update_preview()
+            self._set_status(f"已新增 {CATEGORY_LABELS[category]}：{entity_id}，並套用到目前項目。")
+
+        ttk.Button(dialog, text="新增並套用", command=commit).grid(row=next_row, column=0, padx=8, pady=8)
+        ttk.Button(dialog, text="取消", command=dialog.destroy).grid(row=next_row, column=1, sticky="e", padx=8, pady=8)
+        id_entry.focus_set()
+
+    def _extend_current_kind_allowed_slots(self, slot_id: str) -> None:
+        if self.current_category != "items" or "kind" not in self.vars:
+            return
+        kind_id = self.vars["kind"].get().strip()
+        kind = deepcopy(self.data.get("item_kinds", {}).get(kind_id, {}))
+        if not kind or "equip" not in kind_actions(kind):
+            return
+        allowed_slots = kind_allowed_slots(kind)
+        if not allowed_slots or slot_id in allowed_slots:
+            return
+        allowed_slots.append(slot_id)
+        kind["allowed_slots"] = sorted(set(allowed_slots))
+        self.repo.save_entity("item_kinds", kind, original_id=kind_id)
+        self.data["item_kinds"] = self.repo.load_category("item_kinds")
+
+    def _save_reference_definition(
+        self,
+        category: str,
+        entity_id: str,
+        name: str,
+        description: str = "",
+        *,
+        order: str | int | None = None,
+        allowed_actions: list[str] | None = None,
+        required_fields: list[str] | None = None,
+        stackable: bool = False,
+        default_max_stack: str | int | None = None,
+        allowed_slots: list[str] | None = None,
+    ) -> str:
+        if category not in {"item_kinds", "equipment_slots"}:
+            raise ValueError(f"不支援的索引分類：{category}")
+        entity_id = entity_id.strip()
+        if not entity_id:
+            raise ValueError("ID 不可空白")
+        if entity_id in self.data.get(category, {}):
+            raise ValueError(f"ID 已存在：{entity_id}")
+        entity: dict[str, Any] = {"id": entity_id}
+        if name.strip():
+            entity["name"] = name.strip()
+        if description.strip():
+            entity["description"] = description.strip()
+        if category == "equipment_slots" and order not in (None, ""):
+            try:
+                entity["order"] = int(order)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("顯示順序必須是整數") from exc
+        if category == "item_kinds":
+            if allowed_actions is None:
+                entity["allowed_actions"] = sorted(ITEM_ACTION_CATALOG)
+            elif allowed_actions:
+                entity["allowed_actions"] = sorted(set(allowed_actions))
+            if required_fields:
+                entity["required_fields"] = sorted(set(required_fields))
+            if stackable:
+                entity["stackable"] = True
+            if default_max_stack not in (None, ""):
+                try:
+                    entity["default_max_stack"] = int(default_max_stack)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("預設堆疊上限必須是整數") from exc
+            if allowed_slots:
+                entity["allowed_slots"] = sorted(set(allowed_slots))
+        self.repo.save_entity(category, entity)
+        self.data[category] = self.repo.load_category(category)
+        self._refresh_filter_values()
+        return entity_id
 
     # ---------- helper dialogs ----------
     def _add_delivery_task(self) -> None:
@@ -917,6 +1384,15 @@ class DataEditorApp(tk.Tk):
         templates = {
             "tags": {"id": "", "name": "", "description": ""},
             "roles": {"id": "", "name": "", "description": ""},
+            "item_kinds": {
+                "id": "",
+                "name": "",
+                "description": "",
+                "allowed_actions": [],
+                "required_fields": [],
+                "allowed_slots": [],
+            },
+            "equipment_slots": {"id": "", "name": "", "description": ""},
             "items": {"id": "", "name": "", "desc": ""},
             "rooms": {"id": "", "name": "", "desc": "", "exits": {}, "npcs": [], "items": [], "tags": []},
             "npcs": {"id": "", "name": "", "aliases": [], "roles": [], "tags": [], "topics": {}, "gifts": {}},

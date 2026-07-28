@@ -4,6 +4,16 @@ from dataclasses import dataclass
 import re
 from typing import Any, Iterable, Mapping
 
+from kind_contracts import (
+    ACTION_FIELD_HINTS,
+    ITEM_ACTION_CATALOG,
+    ITEM_FIELD_CATALOG,
+    field_has_value,
+    kind_actions,
+    kind_allowed_slots,
+    kind_required_fields,
+)
+
 
 ID_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 
@@ -89,6 +99,8 @@ def validate_database(data: Mapping[str, Mapping[str, Any]]) -> list[ValidationI
 
     tags = data.get("tags", {})
     roles = data.get("roles", {})
+    item_kinds = data.get("item_kinds", {})
+    equipment_slots = data.get("equipment_slots", {})
     items = data.get("items", {})
     rooms = data.get("rooms", {})
     npcs = data.get("npcs", {})
@@ -104,8 +116,108 @@ def validate_database(data: Mapping[str, Mapping[str, Any]]) -> list[ValidationI
                 if not isinstance(value, (int, float)):
                     _issue(issues, "error", "tags", tag_id, f"倍率 {target_tag} 必須是數字")
 
-    # Item 的戰鬥 tags。
+    # 物品種類與裝備欄索引。
+    for slot_id, slot in equipment_slots.items():
+        order = slot.get("order")
+        if order is not None and (not isinstance(order, int) or isinstance(order, bool)):
+            _issue(issues, "error", "equipment_slots", slot_id, "order 必須是整數")
+
+    for kind_id, kind in item_kinds.items():
+        actions_raw = _require_list(issues, "item_kinds", kind_id, kind.get("allowed_actions"), "allowed_actions")
+        required_raw = _require_list(issues, "item_kinds", kind_id, kind.get("required_fields"), "required_fields")
+        slots_raw = _require_list(issues, "item_kinds", kind_id, kind.get("allowed_slots"), "allowed_slots")
+
+        actions: set[str] = set()
+        for action in actions_raw or []:
+            if not isinstance(action, str):
+                _issue(issues, "error", "item_kinds", kind_id, "allowed_actions 只能包含字串 ID")
+            elif action not in ITEM_ACTION_CATALOG:
+                _issue(issues, "error", "item_kinds", kind_id, f"未知的允許操作：{action}")
+            elif action in actions:
+                _issue(issues, "warning", "item_kinds", kind_id, f"allowed_actions 重複：{action}")
+            actions.add(action)
+
+        required: set[str] = set()
+        for field_name in required_raw or []:
+            if not isinstance(field_name, str):
+                _issue(issues, "error", "item_kinds", kind_id, "required_fields 只能包含字串 ID")
+            elif field_name not in ITEM_FIELD_CATALOG:
+                _issue(issues, "error", "item_kinds", kind_id, f"未知的必填 Item 欄位：{field_name}")
+            elif field_name in required:
+                _issue(issues, "warning", "item_kinds", kind_id, f"required_fields 重複：{field_name}")
+            required.add(field_name)
+
+        for action_id, fields in ACTION_FIELD_HINTS.items():
+            conflicting = required.intersection(fields)
+            if conflicting and action_id not in actions:
+                _issue(
+                    issues,
+                    "error",
+                    "item_kinds",
+                    kind_id,
+                    f"必填欄位 {', '.join(sorted(conflicting))} 需要允許操作 {action_id}",
+                )
+
+        allowed_slots: set[str] = set()
+        for slot_id in slots_raw or []:
+            if not isinstance(slot_id, str):
+                _issue(issues, "error", "item_kinds", kind_id, "allowed_slots 只能包含字串 ID")
+            elif slot_id not in equipment_slots:
+                _issue(issues, "error", "item_kinds", kind_id, f"allowed_slots 引用了未定義 slot：{slot_id}")
+            allowed_slots.add(str(slot_id))
+        if allowed_slots and "equip" not in actions:
+            _issue(issues, "error", "item_kinds", kind_id, "設定 allowed_slots 時必須允許 equip")
+
+        stackable = kind.get("stackable", False)
+        if not isinstance(stackable, bool):
+            _issue(issues, "error", "item_kinds", kind_id, "stackable 必須是布林值")
+        default_max_stack = kind.get("default_max_stack")
+        if default_max_stack is not None:
+            if not isinstance(default_max_stack, int) or isinstance(default_max_stack, bool) or default_max_stack <= 0:
+                _issue(issues, "error", "item_kinds", kind_id, "default_max_stack 必須是正整數")
+            if stackable is not True:
+                _issue(issues, "error", "item_kinds", kind_id, "不可堆疊的 Kind 不能設定 default_max_stack")
+        if stackable is True and default_max_stack is None:
+            _issue(issues, "warning", "item_kinds", kind_id, "可堆疊 Kind 尚未設定 default_max_stack")
+
+    # Item 的種類、裝備欄與戰鬥 tags。
     for item_id, item in items.items():
+        kind = item.get("kind")
+        if kind and not isinstance(kind, str):
+            _issue(issues, "error", "items", item_id, "kind 必須是字串 ID")
+        elif kind and kind not in item_kinds:
+            _issue(issues, "error", "items", item_id, f"引用了未定義 kind：{kind}")
+        slot = item.get("slot")
+        if slot and not isinstance(slot, str):
+            _issue(issues, "error", "items", item_id, "slot 必須是字串 ID")
+        elif slot and slot not in equipment_slots:
+            _issue(issues, "error", "items", item_id, f"引用了未定義 equipment slot：{slot}")
+
+        kind_meta = item_kinds.get(kind, {}) if isinstance(kind, str) else {}
+        actions = kind_actions(kind_meta)
+        required_fields = kind_required_fields(kind_meta)
+        allowed_slots = kind_allowed_slots(kind_meta)
+        for field_name in sorted(required_fields):
+            if not field_has_value(item, field_name):
+                _issue(issues, "error", "items", item_id, f"Kind {kind!r} 要求必填欄位：{field_name}")
+        if slot and "equip" not in actions:
+            _issue(issues, "error", "items", item_id, f"Kind {kind!r} 未允許 equip，不能設定 slot")
+        if item.get("bonuses") and "equip" not in actions:
+            _issue(issues, "error", "items", item_id, f"Kind {kind!r} 未允許 equip，不能設定 bonuses")
+        if item.get("simple_use") and "use" not in actions:
+            _issue(issues, "error", "items", item_id, f"Kind {kind!r} 未允許 use，不能設定 simple_use")
+        if item.get("uses") and "target_use" not in actions:
+            _issue(issues, "error", "items", item_id, f"Kind {kind!r} 未允許 target_use，不能設定 uses")
+        if slot and allowed_slots and slot not in allowed_slots:
+            _issue(issues, "error", "items", item_id, f"Kind {kind!r} 不允許裝備於 slot：{slot}")
+
+        max_stack = item.get("max_stack")
+        if max_stack is not None:
+            if not isinstance(max_stack, int) or isinstance(max_stack, bool) or max_stack <= 0:
+                _issue(issues, "error", "items", item_id, "max_stack 必須是正整數")
+            if not bool(kind_meta.get("stackable", False)):
+                _issue(issues, "error", "items", item_id, f"Kind {kind!r} 不可堆疊，不能設定 max_stack")
+
         item_tags = _require_list(issues, "items", item_id, item.get("tags"), "tags")
         if item_tags is not None:
             for tag_id in item_tags:
@@ -114,6 +226,25 @@ def validate_database(data: Mapping[str, Mapping[str, Any]]) -> list[ValidationI
                 elif tag_id not in tags:
                     # 現有資料可能含尚未集中定義的裝備特徵；先警告，不鎖死編輯。
                     _issue(issues, "warning", "items", item_id, f"引用了未定義戰鬥 tag：{tag_id}")
+
+        bonuses = _require_mapping(issues, "items", item_id, item.get("bonuses"), "bonuses")
+        if bonuses is not None:
+            for bonus_key, value in bonuses.items():
+                if not isinstance(value, (int, float)) or isinstance(value, bool):
+                    _issue(issues, "error", "items", item_id, f"bonuses.{bonus_key} 必須是數字")
+
+        simple_use = _require_mapping(issues, "items", item_id, item.get("simple_use"), "simple_use")
+        if simple_use is not None:
+            for delta_key in ("hp_delta", "mp_delta", "gold_delta"):
+                value = simple_use.get(delta_key)
+                if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
+                    _issue(issues, "error", "items", item_id, f"simple_use.{delta_key} 必須是整數")
+            consume = simple_use.get("consume")
+            if consume is not None and not isinstance(consume, bool):
+                _issue(issues, "error", "items", item_id, "simple_use.consume 必須是布林值")
+            reward_item = simple_use.get("reward_item")
+            if reward_item and reward_item not in items:
+                _issue(issues, "error", "items", item_id, f"simple_use.reward_item 不存在：{reward_item}")
 
     # Room 引用。
     for room_id, room in rooms.items():
@@ -140,6 +271,13 @@ def validate_database(data: Mapping[str, Mapping[str, Any]]) -> list[ValidationI
         for tag_id in _require_list(issues, "npcs", npc_id, npc.get("tags"), "tags") or []:
             if tag_id not in tags:
                 _issue(issues, "warning", "npcs", npc_id, f"引用了未定義戰鬥 tag：{tag_id}")
+
+        for field_name in ("attr", "stats", "combat"):
+            values = _require_mapping(issues, "npcs", npc_id, npc.get(field_name), field_name)
+            if values is not None:
+                for key, value in values.items():
+                    if not isinstance(value, (int, float)) or isinstance(value, bool):
+                        _issue(issues, "error", "npcs", npc_id, f"{field_name}.{key} 必須是數字")
 
         home_room = npc.get("home_room") or npc.get("default_room")
         if home_room and home_room not in rooms:

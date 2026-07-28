@@ -1,0 +1,82 @@
+{
+  "item_kinds": {
+    "armor": {
+      "name": "防具",
+      "description": "可裝備於防具類欄位的物品。",
+      "allowed_actions": [
+        "deliver",
+        "equip",
+        "gift",
+        "trade"
+      ],
+      "required_fields": [
+        "slot"
+      ],
+      "allowed_slots": [
+        "body",
+        "offhand"
+      ]
+    },
+    "consumable": {
+      "name": "消耗品",
+      "description": "使用後通常會被消耗並產生即時效果。",
+      "allowed_actions": [
+        "deliver",
+        "gift",
+        "trade",
+        "use"
+      ],
+      "required_fields": [
+        "simple_use"
+      ],
+      "stackable": true,
+      "default_max_stack": 20
+    },
+    "key_item": {
+      "name": "重要物品",
+      "description": "用於任務、通行或劇情，不應隨意消耗。",
+      "allowed_actions": [
+        "deliver",
+        "use"
+      ]
+    },
+    "material": {
+      "name": "材料",
+      "description": "可用於交付、製作或交易的原料。",
+      "allowed_actions": [
+        "deliver",
+        "gift",
+        "trade"
+      ],
+      "stackable": true,
+      "default_max_stack": 99
+    },
+    "misc": {
+      "name": "雜物",
+      "description": "尚未歸入其他類別的一般物品。",
+      "allowed_actions": [
+        "deliver",
+        "gift",
+        "trade",
+        "use"
+      ]
+    },
+    "weapon": {
+      "name": "武器",
+      "description": "可裝備於武器類欄位的物品。",
+      "allowed_actions": [
+        "deliver",
+        "equip",
+        "gift",
+        "trade"
+      ],
+      "required_fields": [
+        "slot"
+      ],
+      "allowed_slots": [
+        "offhand",
+        "weapon"
+      ]
+    }
+  }
+}

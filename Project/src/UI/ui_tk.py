@@ -539,6 +539,7 @@ class TkApp(tk.Tk):
         self.world = world
         self.engine = engine
         self.state  = state
+        self.state.inventory.sync_equipment_slots(self.world.get("equipment_slots", {}))
 
         # I/O 綁定到 GUI
         self.engine.say = self.say

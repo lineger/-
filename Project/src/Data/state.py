@@ -42,6 +42,30 @@ class InventoryState:
         "offhand": None
     })
 
+    def sync_equipment_slots(self, slot_definitions: Dict[str, Any] | None) -> None:
+        """依資料索引補齊並排序裝備欄，同時保留存檔中的自訂欄位與既有裝備。"""
+        definitions = slot_definitions or {}
+        if not isinstance(definitions, dict) or not definitions:
+            return
+        current = dict(self.equipment or {})
+        def slot_order(slot_id: str) -> tuple[int, str]:
+            raw_order = (definitions.get(slot_id) or {}).get("order", 9999)
+            try:
+                order = int(raw_order)
+            except (TypeError, ValueError):
+                order = 9999
+            return order, slot_id
+
+        ordered_slots = sorted(definitions, key=slot_order)
+        rebuilt: Dict[str, Optional[str]] = {
+            slot_id: current.get(slot_id)
+            for slot_id in ordered_slots
+        }
+        for slot_id, item_id in current.items():
+            if slot_id not in rebuilt:
+                rebuilt[slot_id] = item_id
+        self.equipment = rebuilt
+
 @dataclass
 class NPCProfile:
     # 基礎數值（可從 world.npcs[...] 初始化一次，之後只改這裡）

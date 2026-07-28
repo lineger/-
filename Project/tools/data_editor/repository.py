@@ -24,6 +24,8 @@ class CategorySpec:
 CATEGORY_SPECS: dict[str, CategorySpec] = {
     "tags": CategorySpec("tags.json", "tags"),
     "roles": CategorySpec("roles.json", "roles"),
+    "item_kinds": CategorySpec("item_kinds.json", "item_kinds"),
+    "equipment_slots": CategorySpec("equipment_slots.json", "equipment_slots"),
     "items": CategorySpec("items.json", None),
     "rooms": CategorySpec("rooms.json", None),
     "npcs": CategorySpec("npcs", None, per_file=True),
@@ -33,9 +35,14 @@ CATEGORY_SPECS: dict[str, CategorySpec] = {
 FIELD_ORDER: dict[str, tuple[str, ...]] = {
     "tags": ("id", "name", "description", "multipliers", "on_hit_proc"),
     "roles": ("id", "name", "description"),
+    "item_kinds": (
+        "id", "name", "description", "allowed_actions", "required_fields",
+        "stackable", "default_max_stack", "allowed_slots",
+    ),
+    "equipment_slots": ("id", "name", "description", "order"),
     "items": (
         "id", "name", "desc", "description", "kind", "slot", "bonuses", "tags",
-        "simple_use", "uses", "events", "value",
+        "max_stack", "simple_use", "uses", "events", "value",
     ),
     "rooms": (
         "id", "name", "desc", "description", "exits", "objects", "npcs", "items",
@@ -59,7 +66,7 @@ NESTED_ORDER: dict[str, tuple[str, ...]] = {
     "on_hit_proc": ("status", "chance"),
 }
 
-SET_LIKE_LIST_FIELDS = {"tags", "roles"}
+SET_LIKE_LIST_FIELDS = {"tags", "roles", "allowed_actions", "required_fields", "allowed_slots"}
 SORTED_MAPPING_FIELDS = {"gifts", "multipliers"}
 
 

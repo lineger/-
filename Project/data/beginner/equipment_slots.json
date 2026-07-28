@@ -1,0 +1,19 @@
+{
+  "equipment_slots": {
+    "weapon": {
+      "name": "主手武器",
+      "description": "主要武器裝備欄。",
+      "order": 10
+    },
+    "body": {
+      "name": "身體防具",
+      "description": "盔甲、衣物與身體防具裝備欄。",
+      "order": 20
+    },
+    "offhand": {
+      "name": "副手",
+      "description": "盾牌、副手武器或其他副手裝備。",
+      "order": 30
+    }
+  }
+}

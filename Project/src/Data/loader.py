@@ -154,6 +154,104 @@ def _validate_role_references(roles: Dict[str, Any], npcs: Dict[str, Any], quest
                 )
 
 
+def _validate_item_indexes(
+    item_kinds: Dict[str, Any],
+    equipment_slots: Dict[str, Any],
+    items: Dict[str, Any],
+) -> None:
+    """驗證物品 kind 契約、裝備 slot 與 Item 欄位的一致性。"""
+    known_actions = {"equip", "use", "target_use", "gift", "deliver", "trade"}
+    known_required_fields = {"slot", "bonuses", "simple_use", "uses", "tags", "max_stack"}
+
+    for slot_id, slot in equipment_slots.items():
+        order = slot.get("order")
+        if order is not None and (not isinstance(order, int) or isinstance(order, bool)):
+            raise ValueError(f"equipment slot {slot_id!r} 的 order 必須是整數")
+
+    for kind_id, kind in item_kinds.items():
+        actions = kind.get("allowed_actions", [])
+        required_fields = kind.get("required_fields", [])
+        allowed_slots = kind.get("allowed_slots", [])
+        if not isinstance(actions, list) or not all(isinstance(value, str) for value in actions):
+            raise ValueError(f"Item kind {kind_id!r} 的 allowed_actions 必須是字串列表")
+        if not isinstance(required_fields, list) or not all(isinstance(value, str) for value in required_fields):
+            raise ValueError(f"Item kind {kind_id!r} 的 required_fields 必須是字串列表")
+        if not isinstance(allowed_slots, list) or not all(isinstance(value, str) for value in allowed_slots):
+            raise ValueError(f"Item kind {kind_id!r} 的 allowed_slots 必須是字串列表")
+        unknown_actions = sorted(set(actions) - known_actions)
+        if unknown_actions:
+            raise ValueError(f"Item kind {kind_id!r} 含未知 allowed_actions：{', '.join(unknown_actions)}")
+        unknown_fields = sorted(set(required_fields) - known_required_fields)
+        if unknown_fields:
+            raise ValueError(f"Item kind {kind_id!r} 含未知 required_fields：{', '.join(unknown_fields)}")
+        unknown_slots = sorted(set(allowed_slots) - set(equipment_slots))
+        if unknown_slots:
+            raise ValueError(f"Item kind {kind_id!r} 引用了未定義 slot：{', '.join(unknown_slots)}")
+        if allowed_slots and "equip" not in actions:
+            raise ValueError(f"Item kind {kind_id!r} 設定 allowed_slots 時必須允許 equip")
+        if set(required_fields).intersection({"slot", "bonuses"}) and "equip" not in actions:
+            raise ValueError(f"Item kind {kind_id!r} 的裝備必填欄位需要允許 equip")
+        if "simple_use" in required_fields and "use" not in actions:
+            raise ValueError(f"Item kind {kind_id!r} 的 simple_use 必填欄位需要允許 use")
+        if "uses" in required_fields and "target_use" not in actions:
+            raise ValueError(f"Item kind {kind_id!r} 的 uses 必填欄位需要允許 target_use")
+        stackable = kind.get("stackable", False)
+        if not isinstance(stackable, bool):
+            raise ValueError(f"Item kind {kind_id!r} 的 stackable 必須是布林值")
+        default_max_stack = kind.get("default_max_stack")
+        if default_max_stack is not None:
+            if not isinstance(default_max_stack, int) or isinstance(default_max_stack, bool) or default_max_stack <= 0:
+                raise ValueError(f"Item kind {kind_id!r} 的 default_max_stack 必須是正整數")
+            if not stackable:
+                raise ValueError(f"Item kind {kind_id!r} 不可堆疊時不能設定 default_max_stack")
+
+    def has_value(item: Dict[str, Any], field_name: str) -> bool:
+        if field_name not in item:
+            return False
+        value = item.get(field_name)
+        if value is None or value == "":
+            return False
+        if isinstance(value, (list, dict, tuple, set)):
+            return bool(value)
+        return True
+
+    for item_id, item in items.items():
+        kind = item.get("kind")
+        if kind and not isinstance(kind, str):
+            raise ValueError(f"Item {item_id!r} 的 kind 必須是字串 ID")
+        if kind and kind not in item_kinds:
+            raise ValueError(f"Item {item_id!r} 引用了未定義 kind：{kind!r}")
+        slot = item.get("slot")
+        if slot and not isinstance(slot, str):
+            raise ValueError(f"Item {item_id!r} 的 slot 必須是字串 ID")
+        if slot and slot not in equipment_slots:
+            raise ValueError(f"Item {item_id!r} 引用了未定義 equipment slot：{slot!r}")
+
+        kind_meta = item_kinds.get(kind, {}) if isinstance(kind, str) else {}
+        actions = set(kind_meta.get("allowed_actions", []))
+        required_fields = set(kind_meta.get("required_fields", []))
+        allowed_slots = set(kind_meta.get("allowed_slots", []))
+        for field_name in required_fields:
+            if not has_value(item, field_name):
+                raise ValueError(f"Item {item_id!r} 的 kind {kind!r} 要求欄位 {field_name!r}")
+        if slot and "equip" not in actions:
+            raise ValueError(f"Item {item_id!r} 的 kind {kind!r} 未允許 equip，不能設定 slot")
+        if item.get("bonuses") and "equip" not in actions:
+            raise ValueError(f"Item {item_id!r} 的 kind {kind!r} 未允許 equip，不能設定 bonuses")
+        if item.get("simple_use") and "use" not in actions:
+            raise ValueError(f"Item {item_id!r} 的 kind {kind!r} 未允許 use，不能設定 simple_use")
+        if item.get("uses") and "target_use" not in actions:
+            raise ValueError(f"Item {item_id!r} 的 kind {kind!r} 未允許 target_use，不能設定 uses")
+        if slot and allowed_slots and slot not in allowed_slots:
+            raise ValueError(f"Item {item_id!r} 的 kind {kind!r} 不允許 slot {slot!r}")
+        max_stack = item.get("max_stack")
+        if max_stack is not None:
+            if not isinstance(max_stack, int) or isinstance(max_stack, bool) or max_stack <= 0:
+                raise ValueError(f"Item {item_id!r} 的 max_stack 必須是正整數")
+            if not bool(kind_meta.get("stackable", False)):
+                raise ValueError(f"Item {item_id!r} 的 kind {kind!r} 不可堆疊，不能設定 max_stack")
+
+
 def load_world(base="../data/beginner"):
     """
     自動偵測兩種布局：
@@ -171,6 +269,17 @@ def load_world(base="../data/beginner"):
     if not os.path.exists(roles_path):
         roles_path = os.path.join(base, "roles.json")
     roles = _load_collection(roles_path, key_name="roles")
+
+    # item kinds 與 equipment slots：提供編輯器與裝備系統共用的資料索引
+    item_kinds_path = os.path.join(base, "item_kinds")
+    if not os.path.exists(item_kinds_path):
+        item_kinds_path = os.path.join(base, "item_kinds.json")
+    item_kinds = _load_collection(item_kinds_path, key_name="item_kinds")
+
+    equipment_slots_path = os.path.join(base, "equipment_slots")
+    if not os.path.exists(equipment_slots_path):
+        equipment_slots_path = os.path.join(base, "equipment_slots.json")
+    equipment_slots = _load_collection(equipment_slots_path, key_name="equipment_slots")
 
     # status_effects
     status_effects_path = os.path.join(base, "status_effects.json")
@@ -222,6 +331,7 @@ def load_world(base="../data/beginner"):
     events = _load_events(events_path)
 
     _validate_role_references(roles, npcs, quests)
+    _validate_item_indexes(item_kinds, equipment_slots, items)
 
     return {
         "rooms": rooms,
@@ -233,4 +343,6 @@ def load_world(base="../data/beginner"):
         "status_effects": status_effects,
         "tags": tags,
         "roles": roles,
+        "item_kinds": item_kinds,
+        "equipment_slots": equipment_slots,
     }, events
