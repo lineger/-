@@ -1,19 +1,44 @@
 {
   "equipment_slots": {
+    "body": {
+      "name": "護甲",
+      "description": "主要防具裝備欄。",
+      "order": 20
+    },
+    "cape": {
+      "name": "披風",
+      "description": "提供額外防護、耐性的肩部防具欄位。",
+      "order": 70
+    },
+    "hemlet": {
+      "name": "頭盔",
+      "description": "次要防具裝備欄，可提供部分異常狀態抗性及特殊狀態賦予。",
+      "order": 40
+    },
+    "leg": {
+      "name": "護腿",
+      "description": "脛甲、綁腿或其他腿部裝備。",
+      "order": 50
+    },
+    "offhand": {
+      "name": "副手武器",
+      "description": "盾牌、副手武器或其他副手裝備。",
+      "order": 30
+    },
+    "ring": {
+      "name": "戒指",
+      "description": "加持、 增益的裝備欄。",
+      "order": 80
+    },
+    "shoe": {
+      "name": "鞋子",
+      "description": "速度、閃避的足部裝備欄位。",
+      "order": 60
+    },
     "weapon": {
       "name": "主手武器",
       "description": "主要武器裝備欄。",
       "order": 10
-    },
-    "body": {
-      "name": "身體防具",
-      "description": "盔甲、衣物與身體防具裝備欄。",
-      "order": 20
-    },
-    "offhand": {
-      "name": "副手",
-      "description": "盾牌、副手武器或其他副手裝備。",
-      "order": 30
     }
   }
 }

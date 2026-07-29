@@ -1,5 +1,16 @@
 {
   "item_kinds": {
+    "alchemy_material": {
+      "name": "煉金原料",
+      "description": "用於製作煉金術藥劑的原材料。",
+      "allowed_actions": [
+        "deliver",
+        "gift",
+        "trade"
+      ],
+      "stackable": true,
+      "default_max_stack": 99
+    },
     "armor": {
       "name": "防具",
       "description": "可裝備於防具類欄位的物品。",
@@ -14,7 +25,11 @@
       ],
       "allowed_slots": [
         "body",
-        "offhand"
+        "cape",
+        "hemlet",
+        "leg",
+        "ring",
+        "shoe"
       ]
     },
     "consumable": {
@@ -40,6 +55,30 @@
         "use"
       ]
     },
+    "leather": {
+      "name": "皮革",
+      "description": "用於製作皮製裝備的原材料。",
+      "allowed_actions": [
+        "deliver",
+        "gift",
+        "trade"
+      ],
+      "stackable": true,
+      "default_max_stack": 99
+    },
+    "magic_scroll": {
+      "name": "魔法卷軸",
+      "description": "用於施放強力魔法的一次性道具。",
+      "allowed_actions": [
+        "deliver",
+        "gift",
+        "target_use",
+        "trade",
+        "use"
+      ],
+      "stackable": true,
+      "default_max_stack": 20
+    },
     "material": {
       "name": "材料",
       "description": "可用於交付、製作或交易的原料。",
@@ -59,6 +98,33 @@
         "gift",
         "trade",
         "use"
+      ]
+    },
+    "ore": {
+      "name": "礦石",
+      "description": "用於製作金屬裝備的原材料。",
+      "allowed_actions": [
+        "deliver",
+        "gift",
+        "trade"
+      ],
+      "stackable": true,
+      "default_max_stack": 99
+    },
+    "shield": {
+      "name": "盾牌",
+      "description": "用於防禦的副手裝備。",
+      "allowed_actions": [
+        "deliver",
+        "equip",
+        "gift",
+        "trade"
+      ],
+      "required_fields": [
+        "slot"
+      ],
+      "allowed_slots": [
+        "offhand"
       ]
     },
     "weapon": {

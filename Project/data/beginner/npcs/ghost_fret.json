@@ -1,0 +1,68 @@
+{
+  "id": "ghost_fret",
+  "name": "幽靈佛特",
+  "aliases": [
+    "佛特",
+    "幽靈"
+  ],
+  "recruitable": true,
+  "home_room": "inn",
+  "roles": [
+    "civilian",
+    "religious"
+  ],
+  "tags": [
+    "ghost"
+  ],
+  "faction": "-",
+  "job": "-",
+  "level": 1,
+  "attr": {
+    "STR": 2,
+    "INT": 3,
+    "CON": 2,
+    "DEX": 2,
+    "CHA": 4,
+    "LCK": 2
+  },
+  "stats": {
+    "hp": 18,
+    "mp": 8,
+    "exp": 0,
+    "gold": 0
+  },
+  "equipment": {
+    "weapon": null,
+    "body": null,
+    "offhand": null
+  },
+  "combat": {
+    "hp": 18,
+    "atk": 2,
+    "def": 1,
+    "speed": 3
+  },
+  "skills": [
+    "heal_small",
+    "weaken"
+  ],
+  "topics": {
+    "greet": {
+      "label": "打招呼",
+      "reply": "愚蠢之徒！",
+      "once": false
+    },
+    "talk_1": {
+      "label": "聊聊 1",
+      "reply": "哈哈哈！你這蠢貨，你該感到害怕。",
+      "once": true
+    }
+  },
+  "gifts": {
+    "wheat": {
+      "reply": "太好了！這是剛出爐的麵包。",
+      "reward_item": "bread",
+      "consume": true
+    }
+  }
+}

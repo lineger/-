@@ -1,29 +1,11 @@
 {
-  "fountain_coin": {
-    "name": "噴水池硬幣",
-    "desc": "舊舊的銅幣，上頭幾乎看不清楚圖案。",
-    "kind": "misc",
-    "simple_use": {
-      "reply": "你把硬幣收進口袋。",
-      "gold_delta": 1,
-      "consume": true
-    }
-  },
-  "room_key": {
-    "name": "客房鑰匙",
-    "desc": "旅館客房的鑰匙，能開啟樓上的房門。",
-    "kind": "key_item",
-    "simple_use": {
-      "reply": "你把鑰匙握在手心，感到安心。"
-    }
-  },
-  "healing_herb": {
-    "name": "治療藥草",
-    "desc": "嚼食能恢復少量體力。",
+  "apple": {
+    "name": "蘋果",
+    "desc": "紅通通的蘋果，看起來很多汁。",
     "kind": "consumable",
     "simple_use": {
-      "reply": "你嚼了藥草，回復了一些體力。",
-      "hp_delta": 5,
+      "reply": "你吃掉了蘋果。",
+      "hp_delta": 2,
       "consume": true
     }
   },
@@ -37,6 +19,47 @@
       "consume": true
     }
   },
+  "dagger": {
+    "name": "匕首",
+    "desc": "簡單的短刃武器，方便攜帶。",
+    "kind": "weapon",
+    "slot": "weapon"
+  },
+  "fish": {
+    "name": "魚",
+    "desc": "剛捕獲的鮮魚，可以食用，也可能適合作為禮物。",
+    "kind": "consumable",
+    "simple_use": {
+      "reply": "你烤熟魚肉後吃了下去。",
+      "hp_delta": 2,
+      "consume": true
+    }
+  },
+  "fishing_rod": {
+    "name": "釣竿",
+    "desc": "或許能在碼頭派上用場。",
+    "kind": "misc"
+  },
+  "fountain_coin": {
+    "name": "噴水池硬幣",
+    "desc": "舊舊的銅幣，上頭幾乎看不清楚圖案。",
+    "kind": "misc",
+    "simple_use": {
+      "reply": "你把硬幣收進口袋。",
+      "gold_delta": 1,
+      "consume": true
+    }
+  },
+  "healing_herb": {
+    "name": "治療藥草",
+    "desc": "嚼食能恢復少量體力。",
+    "kind": "consumable",
+    "simple_use": {
+      "reply": "你嚼了藥草，回復了一些體力。",
+      "hp_delta": 5,
+      "consume": true
+    }
+  },
   "holy_water": {
     "name": "聖水",
     "desc": "潔淨的水，令你心神安定。",
@@ -47,53 +70,18 @@
       "consume": true
     }
   },
+  "iron_heavy_metal_armor": {
+    "name": "鐵製重甲",
+    "kind": "armor",
+    "slot": "body",
+    "tags": [
+      "heavy_armor"
+    ]
+  },
   "iron_ore": {
     "name": "鐵礦",
     "desc": "可以交給鐵匠加工的原料。",
     "kind": "material"
-  },
-  "dagger": {
-    "name": "匕首",
-    "desc": "簡單的短刃武器，方便攜帶。",
-    "kind": "weapon",
-    "slot": "weapon"
-  },
-  "silver_cross": {
-    "name": "銀十字架",
-    "desc": "象徵信仰的飾物，光澤柔和。",
-    "kind": "key_item"
-  },
-  "apple": {
-    "name": "蘋果",
-    "desc": "紅通通的蘋果，看起來很多汁。",
-    "kind": "consumable",
-    "simple_use": {
-      "reply": "你吃掉了蘋果。",
-      "hp_delta": 2,
-      "consume": true
-    }
-  },
-  "wheat": {
-    "name": "小麥",
-    "desc": "收穫的穀物，可以交給麵包師。",
-    "kind": "material"
-  },
-  "fishing_rod": {
-    "name": "釣竿",
-    "desc": "或許能在碼頭派上用場。",
-    "kind": "misc"
-  },
-  "spear_basic": {
-    "name": "長槍",
-    "kind": "weapon",
-    "slot": "weapon",
-    "bonuses": {
-      "atk": 1000,
-      "speed": 0
-    },
-    "tags": [
-      "pierce"
-    ]
   },
   "leather_armor": {
     "name": "皮甲",
@@ -107,32 +95,52 @@
       "light_armor"
     ]
   },
+  "permit": {
+    "name": "通行證",
+    "desc": "由旅店主人交付的通行證，似乎能在某些關卡派上用場。",
+    "kind": "key_item"
+  },
+  "room_key": {
+    "name": "客房鑰匙",
+    "desc": "旅館客房的鑰匙，能開啟樓上的房門。",
+    "kind": "key_item",
+    "simple_use": {
+      "reply": "你把鑰匙握在手心，感到安心。"
+    }
+  },
+  "silver_cross": {
+    "name": "銀十字架",
+    "desc": "象徵信仰的飾物，光澤柔和。",
+    "kind": "key_item"
+  },
+  "spear_basic": {
+    "name": "長槍",
+    "kind": "weapon",
+    "slot": "weapon",
+    "bonuses": {
+      "atk": 1000,
+      "speed": 0
+    },
+    "tags": [
+      "pierce"
+    ]
+  },
   "tower_shield": {
     "name": "塔盾",
-    "kind": "armor",
+    "kind": "shield",
     "slot": "offhand",
     "bonuses": {
       "def_": 2,
       "speed": -1
     },
     "tags": [
-      "shield",
-      "heavy_armor"
+      "heavy_armor",
+      "shield"
     ]
   },
-  "fish": {
-    "name": "魚",
-    "desc": "剛捕獲的鮮魚，可以食用，也可能適合作為禮物。",
-    "kind": "consumable",
-    "simple_use": {
-      "reply": "你烤熟魚肉後吃了下去。",
-      "hp_delta": 2,
-      "consume": true
-    }
-  },
-  "permit": {
-    "name": "通行證",
-    "desc": "由旅店主人交付的通行證，似乎能在某些關卡派上用場。",
-    "kind": "key_item"
+  "wheat": {
+    "name": "小麥",
+    "desc": "收穫的穀物，可以交給麵包師。",
+    "kind": "material"
   }
 }

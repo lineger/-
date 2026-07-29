@@ -1,29 +1,5 @@
 {
   "tags": {
-    "pierce": {
-      "name": "穿刺",
-      "multipliers": { 
-        "heavy_armor": 1.5 
-      },
-      "on_hit_proc": { 
-        "status": "Bleeding", 
-        "chance": 100 
-      }
-    },
-    "slash": {
-      "name": "斬擊",
-      "multipliers": { 
-        "light_armor": 1.2 
-      }
-    },
-    "fire": {
-      "name": "火焰",
-      "multipliers": { 
-        "wood": 2.0, 
-        "ice": 2.0, 
-        "rock": 0.75 
-      }
-    },
     "blunt": {
       "name": "鈍擊",
       "on_hit_proc": {
@@ -31,29 +7,56 @@
         "chance": 15
       }
     },
-
+    "fire": {
+      "name": "火焰",
+      "multipliers": {
+        "ice": 2.0,
+        "rock": 0.75,
+        "wood": 2.0
+      }
+    },
+    "ghost": {
+      "name": "亡靈",
+      "description": "以幽體型態存在的戰鬥單位。"
+    },
     "heavy_armor": {
-      "name": "重甲" 
-    },
-    "light_armor": {
-      "name": "輕甲"
-    },
-    "wood": {
-      "name": "木質"
-    },
-    "ice": {
-      "name": "冰"
-    },
-    "rock": {
-      "name": "岩石"
+      "name": "重甲"
     },
     "human": {
       "name": "人類",
       "description": "具有人類生理特徵的戰鬥單位。"
     },
+    "ice": {
+      "name": "冰"
+    },
+    "light_armor": {
+      "name": "輕甲"
+    },
+    "pierce": {
+      "name": "穿刺",
+      "multipliers": {
+        "heavy_armor": 1.5
+      },
+      "on_hit_proc": {
+        "status": "Bleeding",
+        "chance": 100
+      }
+    },
+    "rock": {
+      "name": "岩石"
+    },
     "shield": {
       "name": "盾牌",
       "description": "可用於格擋與防護的裝備特徵。"
+    },
+    "slash": {
+      "name": "斬擊",
+      "multipliers": {
+        "light_armor": 1.2
+      }
+    },
+    "wood": {
+      "name": "木質"
     }
   }
 }
