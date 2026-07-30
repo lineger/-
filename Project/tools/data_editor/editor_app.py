@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
 from property_editor import PROPERTY_CATALOGS, SearchablePropertyEditor
+from reference_editors import EncounterPoolEditor
 from kind_contracts import (
     ITEM_ACTION_CATALOG,
     ITEM_FIELD_CATALOG,
@@ -25,6 +26,10 @@ CATEGORY_LABELS = {
     "roles": "社交 Roles",
     "item_kinds": "物品種類 Kinds",
     "equipment_slots": "裝備欄位 Slots",
+    "species": "種族 Species",
+    "status_effects": "狀態效果",
+    "skills": "Skills",
+    "monsters": "Monsters",
     "items": "Items",
     "rooms": "Rooms",
     "npcs": "NPCs",
@@ -44,15 +49,20 @@ CATEGORY_FILTERS = {
         ("允許裝備欄", "allowed_slots"),
     ),
     "equipment_slots": (("全部", ""),),
+    "species": (("全部", ""),),
+    "status_effects": (("全部", ""),),
+    "skills": (("全部", ""), ("種類 kind", "kind"), ("戰鬥 Tag", "tags")),
+    "monsters": (("全部", ""), ("種族", "species"), ("戰鬥 Tag", "tags"), ("技能", "skills")),
     "items": (("全部", ""), ("戰鬥 Tag", "tags"), ("種類 kind", "kind"), ("裝備欄 slot", "slot")),
     "rooms": (("全部", ""), ("環境標籤", "tags"), ("固定 NPC", "npcs")),
-    "npcs": (("全部", ""), ("戰鬥 Tag", "tags"), ("社交 Role", "roles"), ("預設房間", "home_room")),
+    "npcs": (("全部", ""), ("種族", "species"), ("戰鬥 Tag", "tags"), ("技能", "skills"), ("社交 Role", "roles"), ("預設房間", "home_room")),
     "quests": (
         ("全部", ""),
         ("任務類型", "task_type"),
         ("目標道具", "target_item"),
         ("收件 Role", "target_role"),
         ("收件 NPC", "target_npc"),
+        ("前置任務", "requires"),
     ),
 }
 
@@ -65,6 +75,10 @@ KNOWN_FIELDS = {
         "stackable", "default_max_stack", "allowed_slots",
     },
     "equipment_slots": {"id", "name", "description", "order"},
+    "species": {"id", "name", "description"},
+    "status_effects": {"id", "name", "description", "duration", "mods", "meta"},
+    "skills": {"id", "name", "desc", "description", "kind", "target", "tags"},
+    "monsters": {"id", "name", "desc", "description", "species", "tags", "combat", "exp", "loot", "skills"},
     "items": {
         "id", "name", "desc", "description", "kind", "slot", "tags",
         "bonuses", "simple_use", "uses", "max_stack",
@@ -72,10 +86,10 @@ KNOWN_FIELDS = {
     "rooms": {"id", "name", "desc", "description", "exits", "npcs", "items", "tags", "encounters"},
     "npcs": {
         "id", "name", "description", "aliases", "recruitable", "home_room", "default_room",
-        "faction", "job", "level", "lvl", "tags", "roles", "attr", "stats", "equipment",
+        "species", "faction", "job", "level", "lvl", "tags", "roles", "attr", "stats", "equipment",
         "combat", "skills", "topics", "gifts",
     },
-    "quests": {"id", "name", "desc", "description", "tasks", "rewards"},
+    "quests": {"id", "name", "desc", "description", "requires", "tasks", "rewards"},
 }
 
 
@@ -378,12 +392,21 @@ class DataEditorApp(tk.Tk):
         row = self._add_entry(row, "id", "ID", entity.get("id", ""), readonly=not id_editable)
 
         category = self.current_category
-        if category in {"tags", "roles", "item_kinds", "equipment_slots"}:
+        if category in {"tags", "roles", "item_kinds", "equipment_slots", "species"}:
             row = self._add_entry(row, "name", "顯示名稱", entity.get("name", ""))
             row = self._add_text(row, "description", "說明", entity.get("description", ""), height=3)
             if category == "tags":
                 row = self._add_json(row, "multipliers", "傷害倍率", entity.get("multipliers", {}), expected=dict, height=5)
-                row = self._add_json(row, "on_hit_proc", "命中效果", entity.get("on_hit_proc", {}), expected=dict, height=5)
+                proc = entity.get("on_hit_proc") or {}
+                row = self._add_combo(
+                    row,
+                    "on_hit_status",
+                    "命中狀態效果",
+                    self.data["status_effects"],
+                    proc.get("status", ""),
+                    allow_empty=True,
+                )
+                row = self._add_entry(row, "on_hit_chance", "觸發機率（%）", proc.get("chance", ""))
             elif category == "item_kinds":
                 action_choices = {
                     action_id: {
@@ -432,6 +455,30 @@ class DataEditorApp(tk.Tk):
                 )
             elif category == "equipment_slots":
                 row = self._add_entry(row, "order", "顯示順序", entity.get("order", ""))
+
+        elif category == "status_effects":
+            row = self._add_entry(row, "name", "顯示名稱", entity.get("name", ""))
+            row = self._add_text(row, "description", "說明", entity.get("description", ""), height=3)
+            row = self._add_entry(row, "duration", "預設持續回合", entity.get("duration", ""))
+            row = self._add_json(row, "mods", "效果修正 mods", entity.get("mods", {}), expected=dict, height=7)
+            row = self._add_json(row, "meta", "附加規則 meta", entity.get("meta", {}), expected=dict, height=5)
+
+        elif category == "skills":
+            row = self._add_entry(row, "name", "名稱", entity.get("name", ""))
+            row = self._add_text(row, "desc", "描述", entity.get("desc", entity.get("description", "")), height=3)
+            row = self._add_entry(row, "kind", "技能種類 kind", entity.get("kind", ""))
+            row = self._add_entry(row, "target", "目標 target", entity.get("target", ""))
+            row = self._add_multiselect(row, "tags", "戰鬥 Tags", self.data["tags"], entity.get("tags", []), height=6)
+
+        elif category == "monsters":
+            row = self._add_entry(row, "name", "名稱", entity.get("name", ""))
+            row = self._add_text(row, "desc", "描述", entity.get("desc", entity.get("description", "")), height=3)
+            row = self._add_combo(row, "species", "種族", self.data["species"], entity.get("species", ""), allow_empty=True)
+            row = self._add_multiselect(row, "tags", "戰鬥 Tags", self.data["tags"], entity.get("tags", []), height=6)
+            row = self._add_property_editor(row, "combat", "戰鬥資料", entity.get("combat", {}), catalog="combat", height=7)
+            row = self._add_entry(row, "exp", "擊敗經驗值", entity.get("exp", ""))
+            row = self._add_json(row, "loot", "掉落 loot", entity.get("loot", {}), expected=dict, height=6)
+            row = self._add_multiselect(row, "skills", "技能", self.data["skills"], entity.get("skills", []), height=7)
 
         elif category == "items":
             row = self._add_entry(row, "name", "名稱", entity.get("name", ""))
@@ -508,7 +555,7 @@ class DataEditorApp(tk.Tk):
             row = self._add_csv(row, "tags", "環境標籤", entity.get("tags", []))
             row = self._add_multiselect(row, "npcs", "固定 NPC", self.data["npcs"], entity.get("npcs", []), height=7)
             row = self._add_multiselect(row, "items", "房間物品", self.data["items"], entity.get("items", []), height=7)
-            row = self._add_json(row, "encounters", "遭遇設定", entity.get("encounters", {}), expected=dict, height=7)
+            row = self._add_encounter_editor(row, "encounters", "遭遇設定", entity.get("encounters", {}), height=7)
 
         elif category == "npcs":
             row = self._add_entry(row, "name", "名稱", entity.get("name", ""))
@@ -517,6 +564,7 @@ class DataEditorApp(tk.Tk):
             row = self._add_bool(row, "recruitable", "可招募", bool(entity.get("recruitable", False)))
             room_value = entity.get("home_room", entity.get("default_room", ""))
             row = self._add_combo(row, "home_room", "預設房間", self.data["rooms"], room_value, allow_empty=True)
+            row = self._add_combo(row, "species", "種族", self.data["species"], entity.get("species", ""), allow_empty=True)
             row = self._add_multiselect(row, "tags", "戰鬥 Tags", self.data["tags"], entity.get("tags", []), height=6)
             row = self._add_multiselect(row, "roles", "社交 Roles", self.data["roles"], entity.get("roles", []), height=7)
             row = self._add_entry(row, "faction", "陣營", entity.get("faction", "-"))
@@ -526,8 +574,10 @@ class DataEditorApp(tk.Tk):
             row = self._add_property_editor(row, "stats", "永久數值 stats", entity.get("stats", {}), catalog="stats", height=7)
             row = self._add_json(row, "equipment", "裝備", entity.get("equipment", {}), expected=dict, height=6)
             row = self._add_property_editor(row, "combat", "戰鬥資料", entity.get("combat", {}), catalog="combat", height=7)
-            row = self._add_json(row, "skills", "技能 ID 陣列", entity.get("skills", []), expected=list, height=5)
+            row = self._add_multiselect(row, "skills", "技能", self.data["skills"], entity.get("skills", []), height=7)
             row = self._add_json(row, "topics", "對話 Topics", entity.get("topics", {}), expected=dict, height=10)
+            ttk.Button(self.form_inner, text="＋ 為 Topic 加入 quest_accept", command=self._add_topic_quest_effect).grid(row=row, column=1, sticky="w", padx=4, pady=(0, 8))
+            row += 1
             row = self._add_json(row, "gifts", "送禮規則", entity.get("gifts", {}), expected=dict, height=9)
             ttk.Button(self.form_inner, text="＋ 新增送禮規則", command=self._add_gift_rule).grid(row=row, column=1, sticky="w", padx=4, pady=(0, 8))
             row += 1
@@ -535,6 +585,12 @@ class DataEditorApp(tk.Tk):
         elif category == "quests":
             row = self._add_entry(row, "name", "名稱", entity.get("name", ""))
             row = self._add_text(row, "desc", "描述", entity.get("desc", entity.get("description", "")), height=4)
+            quest_choices = {
+                quest_id: quest
+                for quest_id, quest in self.data["quests"].items()
+                if quest_id != entity.get("id")
+            }
+            row = self._add_multiselect(row, "requires", "前置任務", quest_choices, entity.get("requires", []), height=6)
             row = self._add_json(row, "tasks", "任務目標", entity.get("tasks", []), expected=list, height=12)
             ttk.Button(self.form_inner, text="＋ 新增 deliver_item 目標", command=self._add_delivery_task).grid(row=row, column=1, sticky="w", padx=4, pady=(0, 8))
             row += 1
@@ -694,6 +750,26 @@ class DataEditorApp(tk.Tk):
         self.widgets[key] = editor
         return row + 1
 
+    def _add_encounter_editor(
+        self,
+        row: int,
+        key: str,
+        label: str,
+        value: dict[str, Any],
+        *,
+        height: int,
+    ) -> int:
+        ttk.Label(self.form_inner, text=label).grid(row=row, column=0, sticky="nw", padx=4, pady=4)
+        editor = EncounterPoolEditor(
+            self.form_inner,
+            value=value,
+            monsters=self.data.get("monsters", {}),
+            height=height,
+        )
+        editor.grid(row=row, column=1, sticky="nsew", padx=4, pady=4)
+        self.widgets[key] = editor
+        return row + 1
+
     def _add_multiselect(
         self,
         row: int,
@@ -774,12 +850,25 @@ class DataEditorApp(tk.Tk):
         entity = deepcopy(self.current_entity) if not self.is_new else {}
         entity["id"] = self._string_var("id", required=True)
 
-        if category in {"tags", "roles", "item_kinds", "equipment_slots"}:
+        if category in {"tags", "roles", "item_kinds", "equipment_slots", "species"}:
             self._set_optional(entity, "name", self._string_var("name"))
             self._set_optional(entity, "description", self._text("description"))
             if category == "tags":
                 self._set_optional(entity, "multipliers", self._json("multipliers", dict))
-                self._set_optional(entity, "on_hit_proc", self._json("on_hit_proc", dict))
+                status_id = self._string_var("on_hit_status")
+                chance_text = self._string_var("on_hit_chance")
+                if status_id or chance_text:
+                    proc: dict[str, Any] = {}
+                    if status_id:
+                        proc["status"] = status_id
+                    if chance_text:
+                        try:
+                            proc["chance"] = int(chance_text)
+                        except ValueError as exc:
+                            raise ValueError("觸發機率必須是整數") from exc
+                    entity["on_hit_proc"] = proc
+                else:
+                    entity.pop("on_hit_proc", None)
             elif category == "item_kinds":
                 self._set_optional(entity, "allowed_actions", self._multiselect("allowed_actions"))
                 self._set_optional(entity, "required_fields", self._multiselect("required_fields"))
@@ -805,6 +894,46 @@ class DataEditorApp(tk.Tk):
                         raise ValueError("顯示順序必須是整數") from exc
                 else:
                     entity.pop("order", None)
+
+        elif category == "status_effects":
+            self._set_optional(entity, "name", self._string_var("name"))
+            self._set_optional(entity, "description", self._text("description"))
+            duration_text = self._string_var("duration")
+            if duration_text:
+                try:
+                    entity["duration"] = int(duration_text)
+                except ValueError as exc:
+                    raise ValueError("狀態持續回合必須是整數") from exc
+            else:
+                entity.pop("duration", None)
+            self._set_optional(entity, "mods", self._json("mods", dict))
+            self._set_optional(entity, "meta", self._json("meta", dict))
+
+        elif category == "skills":
+            self._set_optional(entity, "name", self._string_var("name"))
+            self._set_optional(entity, "desc", self._text("desc"))
+            entity.pop("description", None)
+            self._set_optional(entity, "kind", self._string_var("kind"))
+            self._set_optional(entity, "target", self._string_var("target"))
+            self._set_optional(entity, "tags", self._multiselect("tags"))
+
+        elif category == "monsters":
+            self._set_optional(entity, "name", self._string_var("name"))
+            self._set_optional(entity, "desc", self._text("desc"))
+            entity.pop("description", None)
+            self._set_optional(entity, "species", self._string_var("species"))
+            self._set_optional(entity, "tags", self._multiselect("tags"))
+            self._set_optional(entity, "combat", self._mapping("combat"))
+            exp_text = self._string_var("exp")
+            if exp_text:
+                try:
+                    entity["exp"] = int(exp_text)
+                except ValueError as exc:
+                    raise ValueError("擊敗經驗值必須是整數") from exc
+            else:
+                entity.pop("exp", None)
+            self._set_optional(entity, "loot", self._json("loot", dict))
+            self._set_optional(entity, "skills", self._multiselect("skills"))
 
         elif category == "items":
             self._set_optional(entity, "name", self._string_var("name"))
@@ -838,7 +967,7 @@ class DataEditorApp(tk.Tk):
             self._set_optional(entity, "tags", self._csv("tags"))
             self._set_optional(entity, "npcs", self._multiselect("npcs"))
             self._set_optional(entity, "items", self._multiselect("items"))
-            self._set_optional(entity, "encounters", self._json("encounters", dict))
+            self._set_optional(entity, "encounters", self._encounters("encounters"))
 
         elif category == "npcs":
             self._set_optional(entity, "name", self._string_var("name"))
@@ -850,6 +979,7 @@ class DataEditorApp(tk.Tk):
                 entity.pop("recruitable", None)
             self._set_optional(entity, "home_room", self._string_var("home_room"))
             entity.pop("default_room", None)
+            self._set_optional(entity, "species", self._string_var("species"))
             self._set_optional(entity, "tags", self._multiselect("tags"))
             self._set_optional(entity, "roles", self._multiselect("roles"))
             self._set_optional(entity, "faction", self._string_var("faction"))
@@ -867,7 +997,7 @@ class DataEditorApp(tk.Tk):
             self._set_optional(entity, "stats", self._mapping("stats"))
             self._set_optional(entity, "equipment", self._json("equipment", dict))
             self._set_optional(entity, "combat", self._mapping("combat"))
-            self._set_optional(entity, "skills", self._json("skills", list))
+            self._set_optional(entity, "skills", self._multiselect("skills"))
             self._set_optional(entity, "topics", self._json("topics", dict))
             self._set_optional(entity, "gifts", self._json("gifts", dict))
 
@@ -875,6 +1005,7 @@ class DataEditorApp(tk.Tk):
             self._set_optional(entity, "name", self._string_var("name"))
             self._set_optional(entity, "desc", self._text("desc"))
             entity.pop("description", None)
+            self._set_optional(entity, "requires", self._multiselect("requires"))
             entity["tasks"] = self._json("tasks", list)
             entity["rewards"] = self._json("rewards", list)
 
@@ -921,6 +1052,12 @@ class DataEditorApp(tk.Tk):
         widget = self.widgets[key]
         if not isinstance(widget, SearchablePropertyEditor):
             raise TypeError(f"{key} 不是屬性編輯器")
+        return widget.get_value()
+
+    def _encounters(self, key: str) -> dict[str, Any]:
+        widget = self.widgets[key]
+        if not isinstance(widget, EncounterPoolEditor):
+            raise TypeError(f"{key} 不是遭遇池編輯器")
         return widget.get_value()
 
     def _csv(self, key: str) -> list[str]:
@@ -1310,6 +1447,59 @@ class DataEditorApp(tk.Tk):
         ttk.Button(dialog, text="加入", command=commit).grid(row=3, column=0, padx=8, pady=8)
         ttk.Button(dialog, text="取消", command=dialog.destroy).grid(row=3, column=1, sticky="e", padx=8, pady=8)
 
+    def _add_topic_quest_effect(self) -> None:
+        try:
+            topics = self._json("topics", dict)
+        except Exception as exc:
+            messagebox.showerror("Topics JSON 錯誤", str(exc), parent=self)
+            return
+        topic_ids = sorted(topics)
+        if not topic_ids:
+            messagebox.showinfo("加入任務效果", "請先在 Topics JSON 建立至少一個 topic。", parent=self)
+            return
+        quest_ids = sorted(self.data.get("quests", {}))
+        if not quest_ids:
+            messagebox.showinfo("加入任務效果", "目前沒有可選擇的任務。", parent=self)
+            return
+
+        dialog = tk.Toplevel(self)
+        dialog.title("加入 quest_accept 效果")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.columnconfigure(1, weight=1)
+
+        topic_var = tk.StringVar(value=topic_ids[0])
+        quest_var = tk.StringVar(value=quest_ids[0])
+        ttk.Label(dialog, text="Topic").grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        ttk.Combobox(dialog, textvariable=topic_var, values=topic_ids, state="readonly").grid(
+            row=0, column=1, sticky="ew", padx=8, pady=6
+        )
+        ttk.Label(dialog, text="任務").grid(row=1, column=0, sticky="w", padx=8, pady=6)
+        ttk.Combobox(dialog, textvariable=quest_var, values=quest_ids, state="readonly").grid(
+            row=1, column=1, sticky="ew", padx=8, pady=6
+        )
+
+        def commit() -> None:
+            topic_id = topic_var.get()
+            quest_id = quest_var.get()
+            topic = topics.get(topic_id)
+            if not isinstance(topic, dict):
+                messagebox.showerror("加入任務效果", f"Topic {topic_id} 必須是 object。", parent=dialog)
+                return
+            effects = topic.setdefault("effects", [])
+            if not isinstance(effects, list):
+                messagebox.showerror("加入任務效果", f"Topic {topic_id}.effects 必須是 array。", parent=dialog)
+                return
+            effect = {"type": "quest_accept", "quest_id": quest_id}
+            if effect not in effects:
+                effects.append(effect)
+            self._replace_json_text("topics", topics)
+            dialog.destroy()
+            self._update_preview()
+
+        ttk.Button(dialog, text="加入", command=commit).grid(row=2, column=0, padx=8, pady=8)
+        ttk.Button(dialog, text="取消", command=dialog.destroy).grid(row=2, column=1, sticky="e", padx=8, pady=8)
+
     def _add_gift_rule(self) -> None:
         dialog = tk.Toplevel(self)
         dialog.title("新增送禮規則")
@@ -1393,9 +1583,13 @@ class DataEditorApp(tk.Tk):
                 "allowed_slots": [],
             },
             "equipment_slots": {"id": "", "name": "", "description": ""},
+            "species": {"id": "", "name": "", "description": ""},
+            "status_effects": {"id": "", "name": "", "description": "", "mods": {}},
+            "skills": {"id": "", "name": "", "desc": "", "kind": "", "target": "", "tags": []},
+            "monsters": {"id": "", "name": "", "desc": "", "species": "", "tags": [], "combat": {}, "loot": {}, "skills": []},
             "items": {"id": "", "name": "", "desc": ""},
             "rooms": {"id": "", "name": "", "desc": "", "exits": {}, "npcs": [], "items": [], "tags": []},
-            "npcs": {"id": "", "name": "", "aliases": [], "roles": [], "tags": [], "topics": {}, "gifts": {}},
-            "quests": {"id": "", "name": "", "desc": "", "tasks": [], "rewards": []},
+            "npcs": {"id": "", "name": "", "aliases": [], "species": "", "roles": [], "tags": [], "skills": [], "topics": {}, "gifts": {}},
+            "quests": {"id": "", "name": "", "desc": "", "requires": [], "tasks": [], "rewards": []},
         }
         return deepcopy(templates[category])

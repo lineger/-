@@ -1,7 +1,10 @@
 {
   "id": "blacksmith_garret",
   "name": "鐵匠加雷特",
-  "aliases": ["鐵匠", "加雷特"],
+  "aliases": [
+    "鐵匠",
+    "加雷特"
+  ],
   "faction": "-",
   "job": "-",
   "level": 1,
@@ -24,5 +27,11 @@
       "consume": true
     }
   },
-  "roles": ["blacksmith", "artisan", "merchant", "civilian"]
+  "roles": [
+    "blacksmith",
+    "artisan",
+    "merchant",
+    "civilian"
+  ],
+  "species": "human"
 }

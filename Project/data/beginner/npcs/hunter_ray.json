@@ -1,7 +1,10 @@
 {
   "id": "hunter_ray",
   "name": "獵人雷伊",
-  "aliases": ["獵人", "雷伊"],
+  "aliases": [
+    "獵人",
+    "雷伊"
+  ],
   "faction": "-",
   "job": "-",
   "level": 1,
@@ -24,5 +27,9 @@
       "consume": true
     }
   },
-  "roles": ["hunter", "civilian"]
+  "roles": [
+    "hunter",
+    "civilian"
+  ],
+  "species": "human"
 }

@@ -15,16 +15,8 @@
         "wood": 2.0
       }
     },
-    "ghost": {
-      "name": "亡靈",
-      "description": "以幽體型態存在的戰鬥單位。"
-    },
     "heavy_armor": {
       "name": "重甲"
-    },
-    "human": {
-      "name": "人類",
-      "description": "具有人類生理特徵的戰鬥單位。"
     },
     "ice": {
       "name": "冰"
@@ -57,6 +49,30 @@
     },
     "wood": {
       "name": "木質"
+    },
+    "control": {
+      "name": "控制",
+      "description": "具有限制行動或干擾回合效果的技能標籤。"
+    },
+    "earth": {
+      "name": "大地",
+      "description": "與岩土、大地魔力相關的元素標籤。"
+    },
+    "finisher": {
+      "name": "終結技",
+      "description": "通常在特定條件下獲得額外效果的收尾技能。"
+    },
+    "holy": {
+      "name": "神聖",
+      "description": "與祝福、淨化或聖光相關的戰鬥標籤。"
+    },
+    "magic": {
+      "name": "魔法",
+      "description": "以魔力而非武器物理特徵結算的攻擊標籤。"
+    },
+    "physical": {
+      "name": "物理",
+      "description": "以身體或武器力量造成效果的戰鬥標籤。"
     }
   }
 }

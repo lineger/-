@@ -1,7 +1,11 @@
 {
   "id": "priestess_elaine",
   "name": "女祭司艾蓮",
-  "aliases": ["女祭司", "艾蓮", "祭司"],
+  "aliases": [
+    "女祭司",
+    "艾蓮",
+    "祭司"
+  ],
   "faction": "-",
   "job": "-",
   "level": 1,
@@ -24,5 +28,10 @@
       "consume": false
     }
   },
-  "roles": ["priest", "religious", "civilian"]
+  "roles": [
+    "priest",
+    "religious",
+    "civilian"
+  ],
+  "species": "human"
 }

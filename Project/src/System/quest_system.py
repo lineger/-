@@ -81,12 +81,19 @@ class QuestSystem(BaseSystem):
 
     # --- Hub 介面實作：供外部系統呼叫 ---
     
+    def _missing_requirements(self, state: GameState, quest_id: str | None) -> list[str]:
+        if not quest_id or quest_id not in self.quests:
+            return []
+        required = self.quests[quest_id].get("requires", []) or []
+        return [required_id for required_id in required if required_id not in state.quest.completed]
+
     def _can_accept(self, state: GameState, quest_id: str | None) -> bool:
         return bool(
             quest_id
             and quest_id in self.quests
             and quest_id not in state.quest.active
             and quest_id not in state.quest.completed
+            and not self._missing_requirements(state, quest_id)
         )
 
     def _recipient_matches(
@@ -320,6 +327,10 @@ class QuestSystem(BaseSystem):
 
     def _fire_accept(self, state: GameState, quest_id: str):
         if not self._can_accept(state, quest_id):
+            missing = self._missing_requirements(state, quest_id)
+            if missing:
+                names = [self.quests.get(required_id, {}).get("name", required_id) for required_id in missing]
+                return {"ok": False, "text": "尚未完成前置任務：" + "、".join(names)}
             return {"ok": False, "text": "無法接受此任務 (已完成、已活躍或任務不存在)。"}
             
         qdef = self.quests.get(quest_id)

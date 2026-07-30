@@ -354,7 +354,10 @@ class Encounters:
             name=name,
             hp=base_hp,
             max_hp=base_hp,
-            traits=list(src.get("traits") or src.get("tags") or []),
+            traits=list(dict.fromkeys([
+                *(src.get("traits") or src.get("tags") or []),
+                *([src.get("species")] if src.get("species") else []),
+            ])),
             equipment=dict(src.get("equipment") or {}),
             # 儲存基礎數值供 _battle_view 使用
             base_stats={
@@ -959,7 +962,10 @@ class CombatEngine:
             return set(profile_tags)
 
         npc_def = (self.world.get("npcs") or {}).get(actor_id) or {}
-        return set(npc_def.get("traits") or npc_def.get("tags") or [])
+        tags = set(npc_def.get("traits") or npc_def.get("tags") or [])
+        if npc_def.get("species"):
+            tags.add(npc_def["species"])
+        return tags
 
     def _get_defense_tags(self, state: GameState, actor_id: str) -> set[str]:
         """防禦標籤＝角色自身標籤＋防具／副手裝備標籤。"""

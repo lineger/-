@@ -1,7 +1,11 @@
 {
   "id": "innkeeper_mila",
   "name": "旅館老闆娘米拉",
-  "aliases": ["老闆娘", "米拉", "旅館老闆娘"],
+  "aliases": [
+    "老闆娘",
+    "米拉",
+    "旅館老闆娘"
+  ],
   "faction": "-",
   "job": "-",
   "level": 1,
@@ -16,7 +20,10 @@
       "reply": "樓上有空房，如果找到鑰匙就能進去休息。喔對了，你先幫我個小忙吧。",
       "once": true,
       "effects": [
-        { "type" : "quest_accept", "quest_id": "Q_GO_TO_MARKET"  } 
+        {
+          "type": "quest_accept",
+          "quest_id": "Q_GO_TO_MARKET"
+        }
       ]
     }
   },
@@ -27,5 +34,10 @@
       "consume": true
     }
   },
-  "roles": ["innkeeper", "merchant", "civilian"]
+  "roles": [
+    "innkeeper",
+    "merchant",
+    "civilian"
+  ],
+  "species": "human"
 }

@@ -1,7 +1,10 @@
 {
   "id": "farmer_john",
   "name": "農夫約翰",
-  "aliases": ["農夫", "約翰"],
+  "aliases": [
+    "農夫",
+    "約翰"
+  ],
   "faction": "-",
   "job": "-",
   "level": 1,
@@ -24,5 +27,9 @@
       "consume": true
     }
   },
-  "roles": ["farmer", "civilian"]
+  "roles": [
+    "farmer",
+    "civilian"
+  ],
+  "species": "human"
 }

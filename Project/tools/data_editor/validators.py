@@ -101,6 +101,10 @@ def validate_database(data: Mapping[str, Mapping[str, Any]]) -> list[ValidationI
     roles = data.get("roles", {})
     item_kinds = data.get("item_kinds", {})
     equipment_slots = data.get("equipment_slots", {})
+    species = data.get("species", {})
+    status_effects = data.get("status_effects", {})
+    skills = data.get("skills", {})
+    monsters = data.get("monsters", {})
     items = data.get("items", {})
     rooms = data.get("rooms", {})
     npcs = data.get("npcs", {})
@@ -111,10 +115,67 @@ def validate_database(data: Mapping[str, Mapping[str, Any]]) -> list[ValidationI
         multipliers = _require_mapping(issues, "tags", tag_id, tag.get("multipliers"), "multipliers")
         if multipliers is not None:
             for target_tag, value in multipliers.items():
-                if target_tag not in tags:
-                    _issue(issues, "warning", "tags", tag_id, f"multipliers 引用了未定義 tag：{target_tag}")
+                if target_tag not in tags and target_tag not in species:
+                    _issue(issues, "warning", "tags", tag_id, f"multipliers 引用了未定義 tag/species：{target_tag}")
                 if not isinstance(value, (int, float)):
                     _issue(issues, "error", "tags", tag_id, f"倍率 {target_tag} 必須是數字")
+        proc = _require_mapping(issues, "tags", tag_id, tag.get("on_hit_proc"), "on_hit_proc")
+        if proc:
+            status_id = proc.get("status")
+            if not isinstance(status_id, str) or status_id not in status_effects:
+                _issue(issues, "error", "tags", tag_id, f"on_hit_proc.status 不存在：{status_id}")
+            chance = proc.get("chance")
+            if not isinstance(chance, int) or isinstance(chance, bool) or not 0 <= chance <= 100:
+                _issue(issues, "error", "tags", tag_id, "on_hit_proc.chance 必須是 0–100 的整數")
+
+    # 狀態效果基本結構。
+    for status_id, status in status_effects.items():
+        duration = status.get("duration")
+        if duration is not None and (not isinstance(duration, int) or isinstance(duration, bool) or duration <= 0):
+            _issue(issues, "error", "status_effects", status_id, "duration 必須是正整數")
+        _require_mapping(issues, "status_effects", status_id, status.get("mods"), "mods")
+        _require_mapping(issues, "status_effects", status_id, status.get("meta"), "meta")
+
+    # Skill 的戰鬥 tag 與狀態效果引用。
+    for skill_id, skill in skills.items():
+        for tag_id in _require_list(issues, "skills", skill_id, skill.get("tags"), "tags") or []:
+            if tag_id not in tags:
+                _issue(issues, "warning", "skills", skill_id, f"引用了未定義戰鬥 tag：{tag_id}")
+        status_apply = skill.get("status_apply")
+        if isinstance(status_apply, Mapping):
+            status_id = status_apply.get("id")
+            is_inline = "duration" in status_apply or "mods" in status_apply
+            if status_id and status_id not in status_effects and not is_inline:
+                _issue(issues, "error", "skills", skill_id, f"status_apply.id 不存在：{status_id}")
+        effects = _require_list(issues, "skills", skill_id, skill.get("effects"), "effects") or []
+        for index, effect in enumerate(effects, start=1):
+            if not isinstance(effect, Mapping):
+                _issue(issues, "error", "skills", skill_id, f"第 {index} 個 effect 必須是 object")
+                continue
+            if effect.get("kind") != "apply_status":
+                continue
+            spec = effect.get("status_spec")
+            status_id = spec.get("id") if isinstance(spec, Mapping) else spec
+            is_inline = isinstance(spec, Mapping) and ("duration" in spec or "mods" in spec)
+            if not isinstance(status_id, str) or (status_id not in status_effects and not is_inline):
+                _issue(issues, "error", "skills", skill_id, f"第 {index} 個 effect 引用不存在狀態：{status_id}")
+
+    # Monster 的種族、tag 與技能引用。
+    for monster_id, monster in monsters.items():
+        species_id = monster.get("species")
+        if species_id and species_id not in species:
+            _issue(issues, "error", "monsters", monster_id, f"引用了未定義 species：{species_id}")
+        for tag_id in _require_list(issues, "monsters", monster_id, monster.get("tags"), "tags") or []:
+            if tag_id not in tags:
+                _issue(issues, "error", "monsters", monster_id, f"引用了未定義戰鬥 tag：{tag_id}")
+        for skill_id in _require_list(issues, "monsters", monster_id, monster.get("skills"), "skills") or []:
+            if skill_id not in skills:
+                _issue(issues, "error", "monsters", monster_id, f"引用了不存在 skill：{skill_id}")
+        combat = _require_mapping(issues, "monsters", monster_id, monster.get("combat"), "combat")
+        if combat is not None:
+            for key, value in combat.items():
+                if not isinstance(value, (int, float)) or isinstance(value, bool):
+                    _issue(issues, "error", "monsters", monster_id, f"combat.{key} 必須是數字")
 
     # 物品種類與裝備欄索引。
     for slot_id, slot in equipment_slots.items():
@@ -263,6 +324,26 @@ def validate_database(data: Mapping[str, Mapping[str, Any]]) -> list[ValidationI
             if item_id not in items:
                 _issue(issues, "error", "rooms", room_id, f"引用了不存在 item：{item_id}")
 
+        encounters = _require_mapping(issues, "rooms", room_id, room.get("encounters"), "encounters")
+        if encounters:
+            rate = encounters.get("rate")
+            if rate is not None and (not isinstance(rate, (int, float)) or isinstance(rate, bool) or not 0 <= rate <= 1):
+                _issue(issues, "error", "rooms", room_id, "encounters.rate 必須是 0–1 的數字")
+            pool = _require_list(issues, "rooms", room_id, encounters.get("pool"), "encounters.pool") or []
+            seen_monsters: set[str] = set()
+            for index, entry in enumerate(pool, start=1):
+                if not isinstance(entry, list) or len(entry) != 2:
+                    _issue(issues, "error", "rooms", room_id, f"encounters.pool 第 {index} 筆必須是 [monster_id, weight]")
+                    continue
+                monster_id, weight = entry
+                if monster_id not in monsters:
+                    _issue(issues, "error", "rooms", room_id, f"encounters.pool 引用不存在 monster：{monster_id}")
+                if monster_id in seen_monsters:
+                    _issue(issues, "warning", "rooms", room_id, f"encounters.pool 重複 monster：{monster_id}")
+                seen_monsters.add(str(monster_id))
+                if not isinstance(weight, int) or isinstance(weight, bool) or weight <= 0:
+                    _issue(issues, "error", "rooms", room_id, f"encounters.pool 第 {index} 筆權重必須是正整數")
+
     # NPC 社交、位置、送禮引用。
     for npc_id, npc in npcs.items():
         for role_id in _require_list(issues, "npcs", npc_id, npc.get("roles"), "roles") or []:
@@ -271,6 +352,28 @@ def validate_database(data: Mapping[str, Mapping[str, Any]]) -> list[ValidationI
         for tag_id in _require_list(issues, "npcs", npc_id, npc.get("tags"), "tags") or []:
             if tag_id not in tags:
                 _issue(issues, "warning", "npcs", npc_id, f"引用了未定義戰鬥 tag：{tag_id}")
+        species_id = npc.get("species")
+        if species_id and species_id not in species:
+            _issue(issues, "error", "npcs", npc_id, f"引用了未定義 species：{species_id}")
+        for skill_id in _require_list(issues, "npcs", npc_id, npc.get("skills"), "skills") or []:
+            if skill_id not in skills:
+                _issue(issues, "error", "npcs", npc_id, f"引用了不存在 skill：{skill_id}")
+
+        topics = _require_mapping(issues, "npcs", npc_id, npc.get("topics"), "topics")
+        if topics is not None:
+            for topic_id, topic in topics.items():
+                if not isinstance(topic, Mapping):
+                    _issue(issues, "error", "npcs", npc_id, f"topics.{topic_id} 必須是 object")
+                    continue
+                effects = _require_list(issues, "npcs", npc_id, topic.get("effects"), f"topics.{topic_id}.effects") or []
+                for index, effect in enumerate(effects, start=1):
+                    if not isinstance(effect, Mapping):
+                        _issue(issues, "error", "npcs", npc_id, f"topics.{topic_id}.effects 第 {index} 筆必須是 object")
+                        continue
+                    if effect.get("type") == "quest_accept":
+                        quest_id = effect.get("quest_id")
+                        if quest_id not in quests:
+                            _issue(issues, "error", "npcs", npc_id, f"topics.{topic_id} 引用不存在 quest：{quest_id}")
 
         for field_name in ("attr", "stats", "combat"):
             values = _require_mapping(issues, "npcs", npc_id, npc.get(field_name), field_name)
@@ -295,8 +398,21 @@ def validate_database(data: Mapping[str, Mapping[str, Any]]) -> list[ValidationI
                 if reward and reward not in items:
                     _issue(issues, "error", "npcs", npc_id, f"禮物 {gift_item} 回禮不存在：{reward}")
 
-    # Quest 目標與獎勵。
+    # Quest 前置條件、目標與獎勵。
+    quest_requires: dict[str, list[str]] = {}
     for quest_id, quest in quests.items():
+        requires = _require_list(issues, "quests", quest_id, quest.get("requires"), "requires") or []
+        quest_requires[quest_id] = []
+        for required_id in requires:
+            if not isinstance(required_id, str):
+                _issue(issues, "error", "quests", quest_id, "requires 只能包含字串 quest ID")
+            elif required_id == quest_id:
+                _issue(issues, "error", "quests", quest_id, "任務不能把自己設為前置任務")
+            elif required_id not in quests:
+                _issue(issues, "error", "quests", quest_id, f"requires 引用不存在 quest：{required_id}")
+            else:
+                quest_requires[quest_id].append(required_id)
+
         tasks = _require_list(issues, "quests", quest_id, quest.get("tasks"), "tasks") or []
         for index, task in enumerate(tasks, start=1):
             if not isinstance(task, Mapping):
@@ -327,6 +443,10 @@ def validate_database(data: Mapping[str, Mapping[str, Any]]) -> list[ValidationI
                 target = task.get("target")
                 if target not in npcs:
                     _issue(issues, "error", "quests", quest_id, f"第 {index} 個對話目標引用不存在 NPC：{target}")
+            elif task_type == "defeat_monster":
+                target = task.get("target")
+                if target not in monsters:
+                    _issue(issues, "error", "quests", quest_id, f"第 {index} 個討伐目標引用不存在 monster：{target}")
 
         rewards = _require_list(issues, "quests", quest_id, quest.get("rewards"), "rewards") or []
         for index, reward in enumerate(rewards, start=1):
@@ -335,6 +455,29 @@ def validate_database(data: Mapping[str, Mapping[str, Any]]) -> list[ValidationI
                 continue
             if reward.get("type") == "item" and reward.get("item_id") not in items:
                 _issue(issues, "error", "quests", quest_id, f"第 {index} 個獎勵引用不存在 item：{reward.get('item_id')}")
+
+    # 前置任務循環會造成永遠無法接受，視為錯誤。
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(quest_id: str, path: list[str]) -> None:
+        if quest_id in visited:
+            return
+        if quest_id in visiting:
+            cycle_start = path.index(quest_id) if quest_id in path else 0
+            cycle = path[cycle_start:] + [quest_id]
+            _issue(issues, "error", "quests", quest_id, "前置任務形成循環：" + " → ".join(cycle))
+            return
+        visiting.add(quest_id)
+        path.append(quest_id)
+        for required_id in quest_requires.get(quest_id, []):
+            visit(required_id, path)
+        path.pop()
+        visiting.remove(quest_id)
+        visited.add(quest_id)
+
+    for quest_id in quests:
+        visit(quest_id, [])
 
     return issues
 

@@ -100,6 +100,12 @@ class TeamSystem:
         init_sk = list(src.get("skills", []) or [])
         prof.skills = list(dict.fromkeys(init_sk))  # 去重
 
+        intrinsic = list(src.get("traits") or src.get("tags") or [])
+        species_id = src.get("species")
+        if species_id:
+            intrinsic.append(species_id)
+        prof.traits = list(dict.fromkeys(intrinsic))
+
         state.npc_profiles[target_id] = prof
 
     # ---------- hub interface ----------

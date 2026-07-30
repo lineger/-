@@ -1,0 +1,24 @@
+{
+  "species": {
+    "beast": {
+      "name": "野獸",
+      "description": "以獸類生理構造活動的生物。"
+    },
+    "construct": {
+      "name": "構裝體",
+      "description": "由魔法、機械或人造材料驅動的生命形態。"
+    },
+    "ghost": {
+      "name": "幽靈",
+      "description": "以幽體型態存在的亡者或靈體。"
+    },
+    "human": {
+      "name": "人類",
+      "description": "具有人類生理與社會特徵的智慧種族。"
+    },
+    "slime": {
+      "name": "史萊姆族",
+      "description": "由膠質或魔力凝聚而成的軟體生命。"
+    }
+  }
+}

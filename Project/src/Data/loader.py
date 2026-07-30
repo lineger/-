@@ -154,6 +154,126 @@ def _validate_role_references(roles: Dict[str, Any], npcs: Dict[str, Any], quest
                 )
 
 
+
+
+def _validate_content_references(
+    *,
+    tags: Dict[str, Any],
+    species: Dict[str, Any],
+    status_effects: Dict[str, Any],
+    skills: Dict[str, Any],
+    monsters: Dict[str, Any],
+    rooms: Dict[str, Any],
+    npcs: Dict[str, Any],
+    quests: Dict[str, Any],
+) -> None:
+    """驗證容易因手寫 ID 出錯的跨檔引用。"""
+    for tag_id, tag in tags.items():
+        proc = tag.get("on_hit_proc") or {}
+        if proc:
+            status_id = proc.get("status")
+            if status_id not in status_effects:
+                raise ValueError(f"Tag {tag_id!r} 的 on_hit_proc 引用了不存在狀態：{status_id!r}")
+
+    for skill_id, skill in skills.items():
+        unknown_tags = sorted(set(skill.get("tags") or []) - set(tags))
+        if unknown_tags:
+            raise ValueError(f"Skill {skill_id!r} 引用了未定義 tag：{', '.join(unknown_tags)}")
+        status_apply = skill.get("status_apply")
+        if isinstance(status_apply, dict):
+            status_id = status_apply.get("id")
+            is_inline = "duration" in status_apply or "mods" in status_apply
+            if status_id and status_id not in status_effects and not is_inline:
+                raise ValueError(f"Skill {skill_id!r} 的 status_apply 引用了不存在狀態：{status_id!r}")
+        for index, effect in enumerate(skill.get("effects") or [], start=1):
+            if not isinstance(effect, dict) or effect.get("kind") != "apply_status":
+                continue
+            spec = effect.get("status_spec")
+            status_id = spec.get("id") if isinstance(spec, dict) else spec
+            is_inline = isinstance(spec, dict) and ("duration" in spec or "mods" in spec)
+            if status_id not in status_effects and not is_inline:
+                raise ValueError(
+                    f"Skill {skill_id!r} 的第 {index} 個效果引用不存在狀態：{status_id!r}"
+                )
+
+    for monster_id, monster in monsters.items():
+        species_id = monster.get("species")
+        if species_id and species_id not in species:
+            raise ValueError(f"Monster {monster_id!r} 引用了未定義 species：{species_id!r}")
+        unknown_tags = sorted(set(monster.get("tags") or []) - set(tags))
+        if unknown_tags:
+            raise ValueError(f"Monster {monster_id!r} 引用了未定義 tag：{', '.join(unknown_tags)}")
+        unknown_skills = sorted(set(monster.get("skills") or []) - set(skills))
+        if unknown_skills:
+            raise ValueError(f"Monster {monster_id!r} 引用了不存在 skill：{', '.join(unknown_skills)}")
+
+    for room_id, room in rooms.items():
+        encounters = room.get("encounters") or {}
+        for index, entry in enumerate(encounters.get("pool") or [], start=1):
+            if not isinstance(entry, list) or len(entry) != 2:
+                raise ValueError(f"Room {room_id!r} 的 encounters.pool 第 {index} 筆格式錯誤")
+            monster_id, weight = entry
+            if monster_id not in monsters:
+                raise ValueError(f"Room {room_id!r} 的遭遇池引用不存在 monster：{monster_id!r}")
+            if not isinstance(weight, int) or isinstance(weight, bool) or weight <= 0:
+                raise ValueError(f"Room {room_id!r} 的遭遇權重必須是正整數")
+
+    for npc_id, npc in npcs.items():
+        species_id = npc.get("species")
+        if species_id and species_id not in species:
+            raise ValueError(f"NPC {npc_id!r} 引用了未定義 species：{species_id!r}")
+        unknown_tags = sorted(set(npc.get("tags") or []) - set(tags))
+        if unknown_tags:
+            raise ValueError(f"NPC {npc_id!r} 引用了未定義 tag：{', '.join(unknown_tags)}")
+        unknown_skills = sorted(set(npc.get("skills") or []) - set(skills))
+        if unknown_skills:
+            raise ValueError(f"NPC {npc_id!r} 引用了不存在 skill：{', '.join(unknown_skills)}")
+        for topic_id, topic in (npc.get("topics") or {}).items():
+            if not isinstance(topic, dict):
+                raise ValueError(f"NPC {npc_id!r} 的 topic {topic_id!r} 必須是 object")
+            for effect in topic.get("effects") or []:
+                if isinstance(effect, dict) and effect.get("type") == "quest_accept":
+                    quest_id = effect.get("quest_id")
+                    if quest_id not in quests:
+                        raise ValueError(
+                            f"NPC {npc_id!r} 的 topic {topic_id!r} 引用了不存在 quest：{quest_id!r}"
+                        )
+
+    graph: Dict[str, List[str]] = {}
+    for quest_id, quest in quests.items():
+        required = quest.get("requires") or []
+        if not isinstance(required, list):
+            raise ValueError(f"Quest {quest_id!r} 的 requires 必須是列表")
+        graph[quest_id] = []
+        for required_id in required:
+            if required_id == quest_id:
+                raise ValueError(f"Quest {quest_id!r} 不能把自己設為前置任務")
+            if required_id not in quests:
+                raise ValueError(f"Quest {quest_id!r} 引用了不存在前置任務：{required_id!r}")
+            graph[quest_id].append(required_id)
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(quest_id: str, path: List[str]) -> None:
+        if quest_id in visited:
+            return
+        if quest_id in visiting:
+            cycle_start = path.index(quest_id) if quest_id in path else 0
+            cycle = path[cycle_start:] + [quest_id]
+            raise ValueError("Quest 前置條件形成循環：" + " -> ".join(cycle))
+        visiting.add(quest_id)
+        path.append(quest_id)
+        for required_id in graph.get(quest_id, []):
+            visit(required_id, path)
+        path.pop()
+        visiting.remove(quest_id)
+        visited.add(quest_id)
+
+    for quest_id in graph:
+        visit(quest_id, [])
+
+
 def _validate_item_indexes(
     item_kinds: Dict[str, Any],
     equipment_slots: Dict[str, Any],
@@ -281,6 +401,12 @@ def load_world(base="../data/beginner"):
         equipment_slots_path = os.path.join(base, "equipment_slots.json")
     equipment_slots = _load_collection(equipment_slots_path, key_name="equipment_slots")
 
+    # species（種族與材質／元素 tags 分離；戰鬥時計算路徑仍可共用）
+    species_path = os.path.join(base, "species")
+    if not os.path.exists(species_path):
+        species_path = os.path.join(base, "species.json")
+    species = _load_collection(species_path, key_name="species")
+
     # status_effects
     status_effects_path = os.path.join(base, "status_effects.json")
     status_effects = _read_json(status_effects_path).get("status_effects", {})
@@ -332,6 +458,16 @@ def load_world(base="../data/beginner"):
 
     _validate_role_references(roles, npcs, quests)
     _validate_item_indexes(item_kinds, equipment_slots, items)
+    _validate_content_references(
+        tags=tags,
+        species=species,
+        status_effects=status_effects,
+        skills=skills,
+        monsters=monsters,
+        rooms=rooms,
+        npcs=npcs,
+        quests=quests,
+    )
 
     return {
         "rooms": rooms,
@@ -341,6 +477,7 @@ def load_world(base="../data/beginner"):
         "quests": quests,
         "skills": skills,
         "status_effects": status_effects,
+        "species": species,
         "tags": tags,
         "roles": roles,
         "item_kinds": item_kinds,

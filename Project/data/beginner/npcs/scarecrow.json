@@ -1,7 +1,9 @@
 {
   "id": "scarecrow",
   "name": "稻草人",
-  "aliases": ["稻草人"],
+  "aliases": [
+    "稻草人"
+  ],
   "faction": "-",
   "job": "-",
   "level": 1,
@@ -18,5 +20,8 @@
     }
   },
   "gifts": {},
-  "roles": ["construct"]
+  "roles": [
+    "construct"
+  ],
+  "species": "construct"
 }

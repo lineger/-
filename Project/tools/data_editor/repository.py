@@ -26,6 +26,10 @@ CATEGORY_SPECS: dict[str, CategorySpec] = {
     "roles": CategorySpec("roles.json", "roles"),
     "item_kinds": CategorySpec("item_kinds.json", "item_kinds"),
     "equipment_slots": CategorySpec("equipment_slots.json", "equipment_slots"),
+    "species": CategorySpec("species.json", "species"),
+    "status_effects": CategorySpec("status_effects.json", "status_effects"),
+    "skills": CategorySpec("skills.json", "skills"),
+    "monsters": CategorySpec("monsters.json", "monsters"),
     "items": CategorySpec("items.json", None),
     "rooms": CategorySpec("rooms.json", None),
     "npcs": CategorySpec("npcs", None, per_file=True),
@@ -40,6 +44,10 @@ FIELD_ORDER: dict[str, tuple[str, ...]] = {
         "stackable", "default_max_stack", "allowed_slots",
     ),
     "equipment_slots": ("id", "name", "description", "order"),
+    "species": ("id", "name", "description"),
+    "status_effects": ("id", "name", "description", "duration", "mods", "meta"),
+    "skills": ("id", "name", "desc", "description", "kind", "target", "tags"),
+    "monsters": ("id", "name", "desc", "description", "species", "tags", "combat", "exp", "loot", "skills"),
     "items": (
         "id", "name", "desc", "description", "kind", "slot", "bonuses", "tags",
         "max_stack", "simple_use", "uses", "events", "value",
@@ -50,10 +58,10 @@ FIELD_ORDER: dict[str, tuple[str, ...]] = {
     ),
     "npcs": (
         "id", "name", "description", "aliases", "recruitable", "home_room", "default_room",
-        "roles", "tags", "faction", "job", "level", "lvl", "attr", "stats", "equipment",
+        "species", "roles", "tags", "faction", "job", "level", "lvl", "attr", "stats", "equipment",
         "combat", "skills", "topics", "gifts", "trades", "schedule", "events",
     ),
-    "quests": ("id", "name", "desc", "description", "tasks", "rewards"),
+    "quests": ("id", "name", "desc", "description", "requires", "tasks", "rewards"),
 }
 
 NESTED_ORDER: dict[str, tuple[str, ...]] = {
@@ -66,7 +74,7 @@ NESTED_ORDER: dict[str, tuple[str, ...]] = {
     "on_hit_proc": ("status", "chance"),
 }
 
-SET_LIKE_LIST_FIELDS = {"tags", "roles", "allowed_actions", "required_fields", "allowed_slots"}
+SET_LIKE_LIST_FIELDS = {"tags", "roles", "skills", "requires", "allowed_actions", "required_fields", "allowed_slots"}
 SORTED_MAPPING_FIELDS = {"gifts", "multipliers"}
 
 

@@ -1,7 +1,11 @@
 {
   "id": "old_man",
   "name": "和藹的老者",
-  "aliases": ["老者", "老人", "阿伯"],
+  "aliases": [
+    "老者",
+    "老人",
+    "阿伯"
+  ],
   "faction": "-",
   "job": "-",
   "level": 1,
@@ -18,5 +22,9 @@
     }
   },
   "gifts": {},
-  "roles": ["elder", "civilian"]
+  "roles": [
+    "elder",
+    "civilian"
+  ],
+  "species": "human"
 }

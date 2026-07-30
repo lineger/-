@@ -11,9 +11,6 @@
     "civilian",
     "religious"
   ],
-  "tags": [
-    "ghost"
-  ],
   "faction": "-",
   "job": "-",
   "level": 1,
@@ -64,5 +61,6 @@
       "reward_item": "bread",
       "consume": true
     }
-  }
+  },
+  "species": "ghost"
 }

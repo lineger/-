@@ -95,6 +95,9 @@ class NPCProfile:
     # 永久技能（和你先前的 state.known_skills 並存；下面第 3 步會改戰鬥優先讀這裡）
     skills: List[str] = field(default_factory=list)
 
+    # 自身戰鬥標籤；種族 ID 會在初始化時一併加入。
+    traits: List[str] = field(default_factory=list)
+
 # === 隊伍系統 ===
 @dataclass
 class PartyState:
